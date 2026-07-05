@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="EduNex.API/EduNex.API.csproj" />
+  <Project Path="EduNex.DataAccess/EduNex.DataAccess.csproj" />
+  <Project Path="EduNex.Models/EduNex.Models.csproj" />
+  <Project Path="EduNex.Services/EduNex.Services.csproj" />
+</Solution>

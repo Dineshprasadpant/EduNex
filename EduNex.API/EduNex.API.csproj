@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
+		<PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.9" />
+		<PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
+		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.9" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\EduNex.DataAccess\EduNex.DataAccess.csproj" />
+		<ProjectReference Include="..\EduNex.Models\EduNex.Models.csproj" />
+		<ProjectReference Include="..\EduNex.Services\EduNex.Services.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="wwwroot\" />
+	  <Folder Include="wwwroot\uploads\general\" />
+	</ItemGroup>
+
+</Project>

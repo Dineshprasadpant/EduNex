@@ -1,0 +1,84 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# ASP.NET Core
+appsettings.Development.json
+
+# Publish output
+publish/
+
+# NuGet
+packages/
+*.nupkg
+
+# Logs
+*.log
+
+# Test Results
+TestResults/
+
+# Entity Framework
+*.mdf
+*.ldf
+
+# SQL Server LocalDB
+*.dbmdl
+
+# Resharper
+_ReSharper*/
+*.DotSettings.user
+
+# Azure
+PublishScripts/
+
+# OS Files
+Thumbs.db
+Desktop.ini
+
+# Mac
+.DS_Store
+
+# Node.js (if using frontend)
+node_modules/
+npm-debug.log*
+
+# Environment variables
+.env
+.env.*
+
+# Temporary files
+*.tmp
+*.temp
+
+# Coverage reports
+coverage/
+*.coverage
+*.coveragexml
+
+# Generated files
+Generated_Code/
+
+# JetBrains Rider
+*.sln.iml
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
