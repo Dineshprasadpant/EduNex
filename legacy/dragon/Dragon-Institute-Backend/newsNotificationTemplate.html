@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=UTF-8>
+<title>News Update</title>
+<style>
+body{font-family:Arial,sans-serif;line-height:1.5;color:#333;max-width:600px;margin:0 auto;padding:0}
+.header{background:#2563eb;color:#fff;padding:15px 10px;text-align:center}
+.content{padding:15px 10px;border:1px solid #e2e8f0;border-top:0}
+.news-title{font-size:18px;font-weight:700;margin-bottom:12px;color:#1e40af}
+.news-detail{margin-bottom:8px}
+.detail-label{font-weight:700;color:#2563eb}
+.publisher{font-style:italic;color:#4b5563}
+.footer{margin-top:15px;font-size:11px;color:#64748b;text-align:center;padding-top:8px;border-top:1px solid #e2e8f0}
+.unsubscribe{color:#64748b;font-size:11px;text-align:center;margin-top:15px}
+.unsubscribe a{color:#2563eb;text-decoration:none}
+.read-more{margin-top:15px;text-align:center}
+.read-more a{display:inline-block;background:#2563eb;color:#fff;padding:8px 15px;border-radius:4px;text-decoration:none}
+.category-tag{display:inline-block;background:#f1f5f9;padding:2px 8px;border-radius:10px;margin:2px}
+</style>
+</head>
+<body>
+<div class=header>
+<h1>News Update</h1>
+</div>
+<div class=content>
+<div class=news-title>{{title}}</div>
+<div class=news-detail>
+<span class=publisher>Published by: {{publisher}}</span>
+</div>
+<div class=news-detail>
+<span class=detail-label>Published Date:</span> {{publishDate}}
+</div>
+<div class=news-detail>
+<div style=margin-top:8px;white-space:pre-line>{{content}}</div>
+</div>
+{{#if categories.length}}
+<div class=news-detail>
+<span class=detail-label>Categories:</span> 
+{{#each categories}}
+<span class=category-tag>{{this}}</span>
+{{/each}}
+</div>
+{{/if}}
+<div class=read-more>
+<a href={{readMoreLink}}>Read More</a>
+</div>
+</div>
+<div class=footer>
+<p>Dragon Education Foundation</p>
+<div class=unsubscribe>
+<a href={{unsubscribeLink}}>Unsubscribe from news updates</a>
+</div>
+</div>
+</body>
+</html>
