@@ -1,5 +1,4 @@
 ﻿using EduNex.Api.Filters;
-using EduNex.Api.Model;
 using EduNex.Api.Service;
 using EduNex.Models; 
 using Microsoft.AspNetCore.Authorization;

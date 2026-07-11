@@ -1,6 +1,5 @@
 ﻿using System.Data;
 using Dapper;
-using EduNex.Api.Model;
 using EduNex.Models;
 
 namespace EduNex.Api.DataAccess

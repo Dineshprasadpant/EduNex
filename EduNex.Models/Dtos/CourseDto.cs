@@ -1,52 +1,67 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json.Serialization;
-
-namespace EduNex.Models
+namespace EduNex.Models.Dtos
 {
-    public class CourseSummaryDto
+    public class CourseDto
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string Title { get; set; }
-        public string Image { get; set; }
-        public int StudentsEnrolled { get; set; }
-        public int TeachersCount { get; set; }
-        public int OverallHours { get; set; }
-        public string ModuleLeader { get; set; }
-        public string Category { get; set; }
-        public decimal Price { get; set; }
-        public decimal OnlinePrice { get; set; }
-        public decimal OfflinePrice { get; set; }
-        public string Priority { get; set; }
-        public string DeliveryMode { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Slug { get; set; } = string.Empty;
+        public string Overview { get; set; } = string.Empty;
+        public decimal? Price { get; set; }
+        public int Discount { get; set; }
+        public int DurationDays { get; set; }
+        public string CourseType { get; set; } = "offline";
+        public string Description { get; set; } = string.Empty;
+        public string? Information { get; set; }
+        public Guid? CategoryId { get; set; }
+        public string? Image { get; set; }
+        public Guid? MediaId { get; set; }
+        public bool IsTrending { get; set; }
+        public bool IsActive { get; set; }
+        public int Views { get; set; }
+        public string? FreeFeatures { get; set; }
+        public string? HalfFeatures { get; set; }
+        public string? PaidFeatures { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
     }
 
-    public class CourseFullDto : CourseSummaryDto
+    public class CreateCourseDto
     {
-        public List<string> Description { get; set; } = new();
-        public List<string> CourseHighlights { get; set; } = new();
-        public List<LearningFormat> LearningFormat { get; set; } = new();
-        public List<CurriculumItem> Curriculum { get; set; } = new();
-        public List<ScheduleItem> Schedule { get; set; } = new();
+        public string Title { get; set; } = string.Empty;
+        public string Overview { get; set; } = string.Empty;
+        public decimal? Price { get; set; }
+        public int Discount { get; set; }
+        public int DurationDays { get; set; }
+        public string CourseType { get; set; } = "offline";
+        public string Description { get; set; } = string.Empty;
+        public string? Information { get; set; }
+        public Guid? CategoryId { get; set; }
+        public string? Image { get; set; }
+        public Guid? MediaId { get; set; }
+        public bool IsTrending { get; set; }
+        public bool IsActive { get; set; }
+        public string? FreeFeatures { get; set; }
+        public string? HalfFeatures { get; set; }
+        public string? PaidFeatures { get; set; }
     }
 
-    public class CoursePaginationDto
+    public class UpdateCourseDto
     {
-        public int CurrentPage { get; set; }
-        public int ItemsPerPage { get; set; }
-        public int TotalItems { get; set; }
-        public int TotalPages { get; set; }
-        public bool HasNextPage { get; set; }
-        public bool HasPreviousPage { get; set; }
-    }
-
-    public class PagedResultDto<T>
-    {
-        [JsonPropertyName("courses")]
-        public IEnumerable<T> Courses { get; set; }
-
-        [JsonPropertyName("pagination")]
-        public CoursePaginationDto Pagination { get; set; }
+        public string? Title { get; set; }
+        public string? Overview { get; set; }
+        public decimal? Price { get; set; }
+        public int? Discount { get; set; }
+        public int? DurationDays { get; set; }
+        public string? CourseType { get; set; }
+        public string? Description { get; set; }
+        public string? Information { get; set; }
+        public Guid? CategoryId { get; set; }
+        public string? Image { get; set; }
+        public Guid? MediaId { get; set; }
+        public bool? IsTrending { get; set; }
+        public bool? IsActive { get; set; }
+        public string? FreeFeatures { get; set; }
+        public string? HalfFeatures { get; set; }
+        public string? PaidFeatures { get; set; }
     }
 }

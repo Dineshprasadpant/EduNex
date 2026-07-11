@@ -1,5 +1,4 @@
 ﻿using EduNex.Api.DataAccess;
-using EduNex.Api.Model;
 using EduNex.Models;
 using Microsoft.AspNetCore.Mvc.Filters;
 

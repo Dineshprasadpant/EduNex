@@ -1,6 +1,5 @@
-using System;
-using System.Threading.Tasks;
 using EduNex.Models;
+using EduNex.Models.Dtos;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,51 +15,40 @@ namespace EduNex.API.Controllers
 
         [HttpPost]
         [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Create([FromBody] Event @event)
+        public async Task<IActionResult> Create([FromBody] CreateEventDto request)
         {
-            try { return StatusCode(201, await _service.CreateEventAsync(@event)); }
-            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            var ev = await _service.CreateAsync(request);
+            return StatusCode(201, new ApiDataResponse<EventDto> { Data = ev });
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:guid}")]
         public async Task<IActionResult> Get(Guid id)
         {
-            try { 
-                var ev = await _service.GetEventAsync(id);
-                if (ev == null) return NotFound(new { message = "Event not found" });
-                return Ok(ev);
-            }
-            catch (Exception ex) { return StatusCode(500, new { message = ex.Message }); }
-        }
-
-        [HttpGet("get/byMonthAndYear")]
-        public async Task<IActionResult> GetByMonthAndYear([FromQuery] string month, [FromQuery] string year)
-        {
-            try { return Ok(await _service.GetByMonthAndYearAsync(month, year)); }
-            catch (Exception ex) { return NotFound(new { message = ex.Message }); }
+            var ev = await _service.GetByIdAsync(id);
+            return Ok(new ApiDataResponse<EventDto> { Data = ev });
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll(int page = 1, int limit = 10)
+        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int limit = 10, [FromQuery] string? privacy = null, [FromQuery] string? search = null)
         {
-            try { return Ok(await _service.GetAllEventsAsync(page, limit)); }
-            catch (Exception ex) { return StatusCode(500, new { message = ex.Message }); }
+            var (data, meta) = await _service.ListAsync(page, limit, privacy, search);
+            return Ok(new ApiListResponse<EventDto> { Data = data, Meta = (PaginationMeta?)meta });
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:guid}")]
         [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] Event @event)
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateEventDto request)
         {
-            try { return Ok(await _service.UpdateEventAsync(id, @event)); }
-            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            var ev = await _service.UpdateAsync(id, request);
+            return Ok(new ApiDataResponse<EventDto> { Data = ev });
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:guid}")]
         [Authorize(Roles = "admin")]
         public async Task<IActionResult> Delete(Guid id)
         {
-            try { return Ok(await _service.DeleteEventAsync(id)); }
-            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            await _service.DeleteAsync(id);
+            return NoContent();
         }
     }
 }

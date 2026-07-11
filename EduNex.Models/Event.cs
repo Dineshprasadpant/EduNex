@@ -18,6 +18,9 @@ namespace EduNex.Models
         public Guid? MediaId { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
+        public List<ResourceMaterial>? ResourceMaterials { get; set; }
+        public List<ExtraInformation>? ExtraInformation { get; set; }
+
     }
     public class EventMain
     {

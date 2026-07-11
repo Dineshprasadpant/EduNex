@@ -1,6 +1,4 @@
-﻿using System.Net.Http.Json;
-using EduNex.Api.Model;
-using EduNex.Models;
+﻿using EduNex.Models;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,10 +14,6 @@ namespace EduNex.Api.Filters
             var httpClientFactory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
 
             var secretKey = configuration["Turnstile:SecretKey"];
-
-            // Dev/test fallback: when no secret key is configured,
-            // verification is skipped so local development and tests keep
-            // working without Turnstile keys (matches the Node version).
             if (string.IsNullOrEmpty(secretKey))
             {
                 await next();

@@ -1,7 +1,5 @@
-// ===== Controllers/CourseController.cs =====
-using System;
-using System.Threading.Tasks;
 using EduNex.Models;
+using EduNex.Models.Dtos;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,59 +10,63 @@ namespace EduNex.API.Controllers
     [Route("api/courses")]
     public class CourseController : ControllerBase
     {
-        private readonly ICourseService _service;
-        public CourseController(ICourseService service) => _service = service;
+        private readonly ICourseService _courseService;
 
-        [HttpGet("summary")]
-        public async Task<IActionResult> GetSummary(int page = 1, int limit = 10)
+        public CourseController(ICourseService courseService)
         {
-            try { return Ok(new { status = "success", data = await _service.GetCoursesSummaryAsync(page, limit) }); }
-            catch (Exception ex) { return BadRequest(new { status = "error", message = ex.Message }); }
+            _courseService = courseService;
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll(int page = 1, int limit = 9)
+        public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] bool? isActive = true)
         {
-            try { return Ok(new { status = "success", data = await _service.GetCoursesFullDetailsAsync(page, limit) }); }
-            catch (Exception ex) { return BadRequest(new { status = "error", message = ex.Message }); }
+            var (data, meta) = await _courseService.ListAsync(page, limit, isActive);
+            return Ok(new ApiListResponse<CourseDto> { Data = data, Meta = (PaginationMeta?)meta });
+        }
+
+        [HttpGet("{id:guid}")]
+        public async Task<IActionResult> GetById(Guid id)
+        {
+            var course = await _courseService.GetByIdAsync(id);
+            return Ok(new ApiDataResponse<CourseDto> { Data = course });
+        }
+
+        [HttpGet("slug/{slug}")]
+        public async Task<IActionResult> GetBySlug(string slug)
+        {
+            var course = await _courseService.GetBySlugAsync(slug);
+            return Ok(new ApiDataResponse<CourseDto> { Data = course });
         }
 
         [HttpPost]
         [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Create([FromBody] Course course)
+        public async Task<IActionResult> Create([FromBody] CreateCourseDto request)
         {
-            try { return Ok(await _service.CreateCourseAsync(course)); }
-            catch (Exception ex) { return BadRequest(new { status = "error", message = ex.Message }); }
+            var course = await _courseService.CreateAsync(request);
+            return StatusCode(201, new ApiDataResponse<CourseDto> { Data = course });
         }
 
-        [HttpGet("getById/{id}")]
-        public async Task<IActionResult> GetById(Guid id)
-        {
-            try { return Ok(await _service.GetCourseByIdAsync(id)); }
-            catch (Exception ex) { return NotFound(new { status = "error", message = ex.Message }); }
-        }
-
-        [HttpGet("deliveryMode/{mode}")]
-        public async Task<IActionResult> GetByMode(string mode, int page = 1, int limit = 10)
-        {
-            try { return Ok(new { status = "success", data = await _service.GetByDeliveryModeAsync(mode, page, limit) }); }
-            catch (Exception ex) { return NotFound(new { status = "error", message = ex.Message }); }
-        }
-
-        [HttpPatch("{id}")]
+        [HttpPatch("{id:guid}")]
         [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] Course course)
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCourseDto request)
         {
-            try { return Ok(await _service.UpdateCourseAsync(id, course)); }
-            catch (Exception ex) { return BadRequest(new { status = "error", message = ex.Message }); }
+            var course = await _courseService.UpdateAsync(id, request);
+            return Ok(new ApiDataResponse<CourseDto> { Data = course });
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:guid}")]
         [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Delete(Guid id)
+        public async Task<IActionResult> Remove(Guid id)
         {
-            try { return Ok(await _service.DeleteCourseAsync(id)); }
-            catch (Exception ex) { return BadRequest(new { status = "error", message = ex.Message }); }
+            await _courseService.DeleteAsync(id);
+            return NoContent();
+        }
+
+        [HttpPost("{id:guid}/view")]
+        public async Task<IActionResult> RecordView(Guid id)
+        {
+            var views = await _courseService.RecordViewAsync(id);
+            return Ok(new { views });
         }
     }
 }

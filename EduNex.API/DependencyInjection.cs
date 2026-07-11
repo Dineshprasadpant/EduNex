@@ -95,9 +95,21 @@ namespace EduNex.API
                 new QuestionSheetDal(connectionString));
             services.AddScoped<ISubscriberDal>(_ =>
                 new SubscriberDal(connectionString));
+            services.AddScoped<ICategoryDal>(_ =>
+                new CategoryDal(connectionString));
+            services.AddScoped<ICourseDal>(_ =>
+                new CourseDal(connectionString));
+            services.AddScoped<IEventDal>(_ =>
+                new EventDal(connectionString));
+            services.AddScoped<IQuestionSheetDal>(_ =>
+                new QuestionSheetDal(connectionString));
             services.AddScoped<IUserDal>(_ =>
                 new UserDal(connectionString));
             // Services
+            services.AddScoped<ICategoryService, CategoryService>();
+            services.AddScoped<ICourseService, CourseService>();
+            services.AddScoped<IEventService, EventService>();
+            services.AddScoped<IQuestionSheetService, QuestionSheetService>();
             services.AddScoped<IAnnouncementService, AnnouncementService>();
             services.AddScoped<IAdvertisementService, AdvertisementService>();
             services.AddScoped<IAnalyticsService, AnalyticsService>();

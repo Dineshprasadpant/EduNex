@@ -25,6 +25,7 @@ namespace EduNex.Models
         public Guid? CreatedBy { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
+        public List<Batch> Batches { get; set; } = new List<Batch>();
     }
 
     public class ExamAttempt

@@ -1,9 +1,6 @@
-﻿using EduNex.Models;
-using Microsoft.AspNetCore.Http;
-using System;
-using System.Collections.Generic;
+﻿using Microsoft.AspNetCore.Http;
 
-namespace EduNex.Api.Model
+namespace EduNex.Models
 {
     public static class PlanType
     {
@@ -68,6 +65,7 @@ namespace EduNex.Api.Model
         public bool IsVerified { get; set; }
         public bool IsBlocked { get; set; }
         public bool LoginLocked { get; set; }
+        public int FailedLoginAttempts { get; set; }
         public DateTimeOffset? LastLoginAt { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }

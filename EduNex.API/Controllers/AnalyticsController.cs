@@ -47,7 +47,7 @@ namespace EduNex.API.Controllers
 
         // GET api/analytics/active-now
         [HttpGet("active-now")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetActiveNow()
         {
             var result = await _service.GetActiveNowAsync();
@@ -56,7 +56,7 @@ namespace EduNex.API.Controllers
 
         // GET api/analytics/daily?from=&to=
         [HttpGet("daily")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetDailyStats([FromQuery] DailyStatsQuery query)
         {
             var result = await _service.GetDailyStatsAsync(query.From, query.To);
@@ -65,7 +65,7 @@ namespace EduNex.API.Controllers
 
         // GET api/analytics/summary
         [HttpGet("summary")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetDashboardSummary()
         {
             var result = await _service.GetDashboardSummaryAsync();

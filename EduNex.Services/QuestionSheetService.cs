@@ -1,90 +1,89 @@
-
-using EduNex.Models;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using EduNex.DataAccess;
+using EduNex.Models.Dtos;
 
 namespace EduNex.Services
 {
     public interface IQuestionSheetService
     {
-        Task<object> GetAllQuestionSheetsAsync(int page, int pageSize);
-        Task<object> GetQuestionSheetByIdAsync(Guid id, bool includeAnswers);
-        Task<object> CreateQuestionSheetAsync(QuestionSheet sheet);
-        Task<object> UpdateQuestionSheetAsync(Guid id, QuestionSheet sheet);
-        Task<object> DeleteQuestionSheetAsync(Guid id);
-        Task<object> SaveExamResultsAsync(Guid userId, Guid examId, string examName, int totalQuestions, int correctAnswers, decimal marksObtained, decimal totalMarks, decimal percentage, int unAnswered, List<string> answers);
+        Task<(List<QuestionSheetDto> Data, object? Meta)> ListSheetsAsync(int page, int limit, string? search);
+        Task<QuestionSheetDto> GetSheetByIdAsync(Guid id);
+        Task<QuestionSheetDto> CreateSheetAsync(CreateSheetDto input, Guid? createdBy);
+        Task<QuestionSheetDto> UpdateSheetAsync(Guid id, UpdateSheetDto input);
+        Task DeleteSheetAsync(Guid id);
+        Task<QuestionDto> AddQuestionAsync(Guid sheetId, CreateQuestionDto input);
+        Task<QuestionDto> UpdateQuestionAsync(Guid sheetId, Guid qId, UpdateQuestionDto input);
+        Task DeleteQuestionAsync(Guid sheetId, Guid qId);
+        Task<List<QuestionDto>> ImportQuestionsAsync(Guid sheetId, ImportQuestionsDto input);
+        Task ReorderQuestionsAsync(Guid sheetId, ReorderQuestionsDto input);
     }
 
     public class QuestionSheetService : IQuestionSheetService
     {
         private readonly IQuestionSheetDal _dal;
-        private readonly IExamPerformanceService _perfService;
-        private readonly IUserDal _userRepo; // Reusing existing User repository
+        public QuestionSheetService(IQuestionSheetDal dal) => _dal = dal;
 
-        public QuestionSheetService(IQuestionSheetDal dal, IExamPerformanceService perfService, IUserDal userRepo)
+        public async Task<(List<QuestionSheetDto> Data, object? Meta)> ListSheetsAsync(int page, int limit, string? search)
         {
-            _dal = dal;
-            _perfService = perfService;
-            _userRepo = userRepo;
+            int p = Math.Max(1, page);
+            int l = Math.Min(100, Math.Max(1, limit));
+            int offset = (p - 1) * l;
+
+            var result = await _dal.ListSheetsAsync(l, offset, search);
+            var meta = new { Page = p, Limit = l, Total = result.Total, TotalPages = (int)Math.Ceiling((double)result.Total / l) };
+            return (result.Data, meta);
         }
 
-        public async Task<object> GetAllQuestionSheetsAsync(int page, int limit)
+        public async Task<QuestionSheetDto> GetSheetByIdAsync(Guid id)
         {
-            var (items, total) = await _dal.GetAllPaginatedAsync(page, limit);
-
-            var totalPages = (int)Math.Ceiling((double)total / limit);
-
-            return new
-            {
-                success = true,
-                data = items,
-                pagination = new
-                {
-                    total,
-                    page,
-                    limit,
-                    totalPages,
-                    hasNext = page < totalPages,
-                    hasPrevious = page > 1
-                }
-            };
-        }
-        public async Task<object> GetQuestionSheetByIdAsync(Guid id, bool includeAnswers)
-        {
-            var sheet = await _dal.GetByIdAsync(id);
-            if (!includeAnswers && sheet != null)
-            {
-                foreach (var q in sheet.Questions) q.CorrectAnswer = null;
-            }
-            return new { success = true, data = sheet };
+            var sheet = await _dal.GetSheetByIdAsync(id);
+            if (sheet == null) throw new Exception("Question sheet not found");
+            return sheet;
         }
 
-        public async Task<object> CreateQuestionSheetAsync(QuestionSheet sheet)
+        public async Task<QuestionSheetDto> CreateSheetAsync(CreateSheetDto input, Guid? createdBy)
         {
-            var id = await _dal.CreateAsync(sheet);
-            return new { success = true, data = await _dal.GetByIdAsync(id) };
+            return await _dal.CreateSheetAsync(input.Title, createdBy);
         }
 
-        public async Task<object> UpdateQuestionSheetAsync(Guid id, QuestionSheet sheet)
+        public async Task<QuestionSheetDto> UpdateSheetAsync(Guid id, UpdateSheetDto input)
         {
-            await _dal.UpdateAsync(id, sheet);
-            return new { success = true, data = await _dal.GetByIdAsync(id) };
+            var updated = await _dal.UpdateSheetAsync(id, input.Title);
+            if (updated == null) throw new Exception("Question sheet not found");
+            return updated;
         }
 
-        public async Task<object> DeleteQuestionSheetAsync(Guid id)
+        public async Task DeleteSheetAsync(Guid id) => await _dal.DeleteSheetAsync(id);
+
+        public async Task<QuestionDto> AddQuestionAsync(Guid sheetId, CreateQuestionDto input)
         {
-            await _dal.DeleteAsync(id);
-            return new { success = true, message = "Question sheet deleted successfully" };
+            var q = await _dal.AddQuestionAsync(sheetId, input.QuestionText, input.Marks, input.SortOrder);
+            q.Options = await _dal.AddOptionsAsync(q.Id, input.Options);
+            return q;
         }
 
-        public async Task<object> SaveExamResultsAsync(Guid userId, Guid examId, string examName, int totalQuestions, int correctAnswers, decimal marksObtained, decimal totalMarks, decimal percentage, int unAnswered, List<string> answers)
+        public async Task<QuestionDto> UpdateQuestionAsync(Guid sheetId, Guid qId, UpdateQuestionDto input)
         {
-            // 1. Record attempt in User record (Simplified DTO used here)
-            // await _userRepo.AddExamResultAsync(userId, ...); 
+            var q = await _dal.UpdateQuestionAsync(qId, input.QuestionText, input.Marks, input.SortOrder);
+            if (q == null) throw new Exception("Question not found");
+            
+            if (input.Options != null) await _dal.ReplaceOptionsAsync(qId, input.Options);
+            
+            return (await _dal.GetQuestionByIdAsync(qId))!;
+        }
 
-            // 2. Update overall performance
-            await _perfService.UpdateStudentPerformanceAsync(examId, userId, percentage);
+        public async Task DeleteQuestionAsync(Guid sheetId, Guid qId) => await _dal.DeleteQuestionAsync(qId);
 
-            return new { message = "Result ucessfully recorded" };
+        public async Task<List<QuestionDto>> ImportQuestionsAsync(Guid sheetId, ImportQuestionsDto input)
+        {
+            return await _dal.BulkAddQuestionsAsync(sheetId, input.Questions);
+        }
+
+        public async Task ReorderQuestionsAsync(Guid sheetId, ReorderQuestionsDto input)
+        {
+            await _dal.ReorderQuestionsAsync(input.Orders);
         }
     }
 }

@@ -1,7 +1,5 @@
 ﻿using EduNex.Api.DataAccess;
-using EduNex.Api.Model;
 using EduNex.Models;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 
 namespace EduNex.Api.Service
