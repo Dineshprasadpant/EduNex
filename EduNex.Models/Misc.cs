@@ -3,12 +3,12 @@ using System.Text.Json.Serialization;
 
 namespace EduNex.Models
 {
+
     public class Subscriber
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string Email { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public string Email { get; set; } = string.Empty;
+        public DateTimeOffset CreatedAt { get; set; }
     }
     public class FileUploadResultDto
     {
@@ -23,28 +23,29 @@ namespace EduNex.Models
     }
     public class Advertisement
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string Title { get; set; }
-        public string Description { get; set; }
-        public string ImageUrl { get; set; }
-        public string LinkUrl { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public Guid? MediaId { get; set; }
+        public string? LinkUrl { get; set; }
+        public string? ButtonText { get; set; }
+        public string? RedirectUrl { get; set; }
+        public string Privacy { get; set; } = "all";
+        public bool IsActive { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
     }
 
-        public class Feedback
-        {
-            [JsonPropertyName("_id")]
-            public Guid Id { get; set; }
-
-            public string Name { get; set; }
-            public string Email { get; set; }
-            public int Rating { get; set; }
-
-            [JsonPropertyName("feedback")]
-            public string FeedbackText { get; set; } // Renamed in C# but mapped to 'feedback' in JSON
-
-            public DateTime CreatedAt { get; set; }
-        }
+    public class Feedback
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public short Rating { get; set; }
+        public string FeedbackText { get; set; } = string.Empty;
+        public string? AdminReply { get; set; }
+        public DateTimeOffset? RepliedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+    }
 }

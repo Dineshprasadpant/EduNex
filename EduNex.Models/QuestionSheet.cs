@@ -6,22 +6,30 @@ namespace EduNex.Models
 {
     public class QuestionSheet
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string SheetName { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-
-        public List<Questionmodel> Questions { get; set; } = new List<Questionmodel>();
+        public string SheetName { get; set; } = string.Empty;
+        public Guid? CreatedBy { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
     }
 
-    public class Questionmodel
+    public class Question
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string question { get; set; }
-        public int Marks { get; set; }
-        public List<string> Answers { get; set; } = new List<string>();
-        public string CorrectAnswer { get; set; }
+        public Guid SheetId { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
+        public decimal Marks { get; set; }
+        public int SortOrder { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
     }
+
+    public class QuestionOption
+    {
+        public Guid Id { get; set; }
+        public Guid QuestionId { get; set; }
+        public string OptionText { get; set; } = string.Empty;
+        public bool IsCorrect { get; set; }
+        public int SortOrder { get; set; }
+    }
+
 }

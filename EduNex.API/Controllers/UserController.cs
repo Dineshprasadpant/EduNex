@@ -1,139 +1,134 @@
-﻿using EduNex.Models;
-using EduNex.Services;
+﻿using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using StackExchange.Redis;
+using EduNex.Common;
+using EduNex.Models;
+using EduNex.Services;
+
 namespace EduNex.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     public class UsersController : ControllerBase
     {
-        private readonly IUserService _userService;
-        private readonly IFileService _fileService;
-        public UsersController(IUserService userService, IFileService fileService)
+        private readonly IUserService _service;
+
+        public UsersController(IUserService service)
         {
-            _userService = userService;
-            _fileService = fileService;
+            _service = service;
         }
 
-        [HttpPost("register")]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> Register([FromForm] UserRegistrationDto registrationDto, IFormFile citizenship, IFormFile? paymentReceipt)
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> List([FromQuery] ListUsersQuery query)
         {
-            string citizenshipUrl = null;
-            string paymentUrl = null;
-
-            try
-            {
-                if (citizenship == null || citizenship.Length == 0)
-                    return BadRequest(new { success = false, message = "Citizenship file is required" });
-
-                if (!_fileService.IsValidImage(citizenship))
-                    return BadRequest(new { success = false, message = "Invalid citizenship file type (only jpg/jpeg/png allowed)" });
-
-                if (paymentReceipt != null && !_fileService.IsValidImage(paymentReceipt))
-                    return BadRequest(new { success = false, message = "Invalid payment file type (only jpg/jpeg/png allowed)" });
-
-                // 2. SAVE FILES FIRST
-                var citRes = await _fileService.UploadFileAsync(citizenship, folder:"uploads/citizenship");
-                citizenshipUrl = citRes.Url;
-                if (paymentReceipt != null)
-                {
-                    var res = await _fileService.UploadFileAsync(paymentReceipt, folder: "uploads/payments");
-                    paymentUrl=res.Url;
-                }
-                    
-
-                // 3. REGISTER USER
-                var result = await _userService.RegisterAsync(
-                    registrationDto,
-                    citizenshipUrl,
-                    paymentUrl
-                );
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "User registered successfully",
-                    userId = result.User.Id
-                });
-            }
-            catch (Exception ex)
-            {
-                // 4. ROLLBACK FILES IF ANY FAILURE
-                if (!string.IsNullOrEmpty(citizenshipUrl))
-                    await _fileService.DeleteFileSafe(citizenshipUrl);
-
-                if (!string.IsNullOrEmpty(paymentUrl))
-                    await _fileService.DeleteFileSafe(paymentUrl);
-
-                return BadRequest(new { success = false, message = ex.Message });
-            }
+            var (data, total, page, limit) = await _service.ListAsync(query);
+            var meta = PaginationMeta.Create(total, page, limit);
+            return Ok(new ApiListResponse<UserListItemDto> { Data = data, Meta = meta });
         }
 
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] UserLoginDto loginDto)
+        [HttpGet("teachers/about")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetTeachersForAbout()
         {
-            try
-            {
-                var result = await _userService.LoginAsync(loginDto);
-                return Ok(new
-                {
-                    success = true,
-                    token = result.Token,
-                    user = result.User
-                });
-            }
-            catch (Exception ex)
-            {
-                return Unauthorized(new { success = false, message = ex.Message });
-            }
+            var teachers = await _service.GetTeachersForAboutAsync();
+            return Ok(new ApiDataResponse<object> { Data = teachers });
         }
 
-        [HttpGet("userInfo/{userId}")]
-        public async Task<IActionResult> GetUserInfo(Guid userId) => Ok(await _userService.GetUserInformationAsync(userId));
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetById(string id)
+        {
+            var user = await _service.GetByIdAsync(Guid.Parse(id));
+            return Ok(new ApiDataResponse<UserDto> { Data = user });
+        }
 
-        [HttpGet("search")]
-        public async Task<IActionResult> Search([FromQuery] string name, int page = 1, int limit = 10) => Ok(await _userService.SearchUsersAsync(name, page, limit));
+        [HttpPost]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Create([FromBody] CreateUserRequest input)
+        {
+            var created = await _service.CreateAsync(input);
+            return StatusCode(201, new ApiDataResponse<UserDto> { Data = created });
+        }
 
-        [HttpGet("unverified")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> GetUnverified() => Ok(await _userService.GetUserAsync("unverified"));
 
-        [HttpGet("verified")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> GetVerified() => Ok(await _userService.GetUserAsync("verified"));
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Update(string id, [FromBody] UpdateUserRequest input)
+        {
+            var updated = await _service.UpdateAsync(Guid.Parse(id), input);
+            return Ok(new ApiDataResponse<UserDto> { Data = updated });
+        }
 
-        [HttpPut("{userId}")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> UpdateUser(Guid userId, [FromBody] updateUserDto updateData) => Ok(await _userService.UpdateUserAsync(userId, updateData));
+        [HttpPut("{id}/verify")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Verify(string id)
+        {
+            var user = await _service.VerifyAsync(Guid.Parse(id));
+            return Ok(new ApiDataResponse<UserDto> { Data = user });
+        }
 
-        [HttpDelete("{userId}")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> DeleteUser(Guid userId) => Ok(await _userService.DeleteUserAsync(userId));
+        [HttpPut("{id}/block")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Block(string id, [FromBody] BlockUserRequest input)
+        {
+            var user = await _service.BlockAsync(Guid.Parse(id), input.Blocked);
+            return Ok(new ApiDataResponse<UserDto> { Data = user });
+        }
 
-        [HttpPost("{userId}/reset-password")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> ResetPassword(Guid userId, [FromBody] PasswordResetRequest request) => Ok(await _userService.ResetPasswordAsync(userId, request.NewPassword));
+        [HttpPut("{id}/unlock")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Unlock(string id)
+        {
+            var user = await _service.UnlockAsync(Guid.Parse(id));
+            return Ok(new ApiDataResponse<UserDto> { Data = user });
+        }
 
-        [HttpPost("registerTeachers")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> RegisterTeacher([FromBody] UserRegistrationDto dto) => Ok(await _userService.RegisterTeacherAsync(dto));
+        [HttpPost("{id}/reset-password")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> ResetPassword(string id, [FromBody] ResetPasswordRequest input)
+        {
+            var result = await _service.ResetPasswordAsync(Guid.Parse(id), input.NewPassword);
+            return Ok(new ApiDataResponse<ResetPasswordResultDto> { Data = result });
+        }
 
-        [HttpPut("verify/{userId}/batch/{batchId}")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> VerifyUser(Guid userId, Guid batchId) => Ok(await _userService.VerifyUserAsync(userId, batchId));
-
-        [HttpPut("{id}/plan")]
+        [HttpGet("{id}/profile")]
         [Authorize]
-        public async Task<IActionResult> UpdatePlan(Guid id, [FromBody] PlanUpdateRequest request)
+        public async Task<IActionResult> GetProfile(string id)
         {
-            return Ok(await _userService.UpdateUserPlanAsync(id, request.Plan, request.PlanUpgradedFrom, request.PaymentImage));
+            var profile = await _service.GetProfileAsync(Guid.Parse(id), GetRequesterId(), GetRequesterRole());
+            return Ok(new ApiDataResponse<object?> { Data = profile });
+        }
+
+        [HttpPut("{id}/profile")]
+        [Authorize]
+        public async Task<IActionResult> UpdateProfile(string id, [FromBody] UpdateProfileRequest input)
+        {
+            var profile = await _service.UpdateProfileAsync(Guid.Parse(id), input, GetRequesterId(), GetRequesterRole());
+            return Ok(new ApiDataResponse<TeacherProfileDto> { Data = profile });
+        }
+
+        [HttpPut("{id}/enrollment")]
+        [Authorize]
+        public async Task<IActionResult> UpdateEnrollment(string id, [FromBody] UpdateEnrollmentRequest input)
+        {
+            var profile = await _service.UpdateEnrollmentAsync(Guid.Parse(id), input, GetRequesterId(), GetRequesterRole());
+            return Ok(new ApiDataResponse<StudentProfile> { Data = profile });
+        }
+
+        private Guid GetRequesterId()
+        {
+            var value = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? throw new UnauthorizedException("Missing user identity claim");
+            return Guid.Parse(value);
+        }
+
+        private string GetRequesterRole()
+        {
+            return User.FindFirst(ClaimTypes.Role)?.Value
+                ?? throw new UnauthorizedException("Missing role claim");
         }
     }
-
-    public class PasswordResetRequest { public string NewPassword { get; set; } }
-    public class PlanUpdateRequest { public string Plan { get; set; } public string PlanUpgradedFrom { get; set; } public string PaymentImage { get; set; } }
 }

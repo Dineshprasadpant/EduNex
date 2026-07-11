@@ -7,19 +7,21 @@ namespace EduNex.Models
     public class Announcement
     {
         public Guid Id { get; set; }
-        public string Title { get; set; }
-        public string Image { get; set; } // full URL
+        public string Title { get; set; } = string.Empty;
+        public string? Image { get; set; }
+        public Guid? MediaId { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string Privacy { get; set; } = "public";
+        public Guid? CourseId { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
 
-        public DateTime AnnouncedDate { get; set; } = DateTime.UtcNow;
-
-        public List<string> Content { get; set; } = new();
-
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-
-        public Cta Cta { get; set; }
-        public List<ResourceMaterial> ResourceMaterials { get; set; } = new();
-        public List<SubInformation> SubInformation { get; set; } = new();
+    public class AnnouncementResource
+    {
+        public Guid Id { get; set; }
+        public Guid AnnouncementId { get; set; }
+        public Guid MediaId { get; set; }
     }
 
     public class News

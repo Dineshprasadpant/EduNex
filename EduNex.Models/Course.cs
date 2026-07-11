@@ -9,29 +9,29 @@ namespace EduNex.Models
 
     public class Course
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string Title { get; set; }
-        public string Image { get; set; }
-        public List<string> Description { get; set; } = new List<string>();
-        public int StudentsEnrolled { get; set; }
-        public int TeachersCount { get; set; }
-        public List<string> CourseHighlights { get; set; } = new List<string>();
-        public int OverallHours { get; set; }
-        public string ModuleLeader { get; set; }
-        public string Category { get; set; }
-        public decimal Price { get; set; }
-        public decimal OnlinePrice { get; set; }
-        public decimal OfflinePrice { get; set; }
-        public Priority Priority { get; set; } = Priority.Medium;
-        public DeliveryMode DeliveryMode { get; set; } = DeliveryMode.Online;
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-
-        public List<LearningFormat> LearningFormat { get; set; } = new List<LearningFormat>();
-        public List<CurriculumItem> Curriculum { get; set; } = new List<CurriculumItem>();
-        public List<ScheduleItem> Schedule { get; set; } = new List<ScheduleItem>();
+        public string Slug { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Overview { get; set; } = string.Empty;
+        public decimal? Price { get; set; }
+        public int Discount { get; set; }
+        public int DurationDays { get; set; }
+        public string CourseType { get; set; } = "offline";
+        public string Description { get; set; } = string.Empty;
+        public string? Information { get; set; }
+        public Guid? CategoryId { get; set; }
+        public string? Image { get; set; }
+        public Guid? MediaId { get; set; }
+        public bool IsTrending { get; set; }
+        public bool IsActive { get; set; }
+        public int Views { get; set; }
+        public string? FreeFeatures { get; set; }
+        public string? HalfFeatures { get; set; }
+        public string? PaidFeatures { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
     }
+
 
     public class LearningFormat
     {

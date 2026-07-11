@@ -1,7 +1,12 @@
-﻿using EduNex.Models;
+﻿using EduNex.Common;
+using EduNex.Models;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StackExchange.Redis;
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace EduNex.API.Controllers
 {
@@ -10,44 +15,81 @@ namespace EduNex.API.Controllers
     public class AnnouncementsController : ControllerBase
     {
         private readonly IAnnouncementService _service;
-        public AnnouncementsController(IAnnouncementService service) => _service = service;
 
-        [HttpPost]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Create([FromBody] Announcement ann)
+        public AnnouncementsController(IAnnouncementService service)
         {
-            try { return Ok(await _service.CreateAnnouncementAsync(ann)); }
-            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            _service = service;
         }
 
-        [HttpGet("{id}")]
-        public async Task<IActionResult> Get(Guid id)
-        {
-            try { return Ok(await _service.GetAnnouncementAsync(id)); }
-            catch (Exception ex) { return NotFound(new { message = ex.Message }); }
-        }
-
+        // GET api/announcements?page=&limit=&search=&privacy=
+        // optionalAuthenticate equivalent: no [Authorize], but claims are
+        // read if a valid token was presented. See GetOptionalRequester.
         [HttpGet]
-        public async Task<IActionResult> GetAll(int page = 1, int limit = 10)
+        [AllowAnonymous]
+        public async Task<IActionResult> List([FromQuery] ListAnnouncementsQuery query)
         {
-            try { return Ok(await _service.GetAllAnnouncementsAsync(page, limit)); }
-            catch (Exception ex) { return StatusCode(500, new { message = ex.Message }); }
+            var requester = GetOptionalRequester();
+            var (data, total, page, limit) = await _service.ListAsync(query, requester);
+            var meta = PaginationMeta.Create(total, page, limit);
+            return Ok(new ApiListResponse<AnnouncementDto> { Data = data, Meta = meta });
         }
 
+        // GET api/announcements/{id}
+        [HttpGet("{id}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetById(string id)
+        {
+            var requester = GetOptionalRequester();
+            var announcement = await _service.GetByIdAsync(Guid.Parse(id), requester);
+            return Ok(new ApiDataResponse<AnnouncementDetailDto> { Data = announcement });
+        }
+
+        // POST api/announcements
+        [HttpPost]
+        [Authorize(Roles =" Admin")]
+        public async Task<IActionResult> Create([FromBody] CreateAnnouncementRequest input)
+        {
+            var created = await _service.CreateAsync(input);
+            return StatusCode(201, new ApiDataResponse<Announcement> { Data = created });
+        }
+
+        // PUT api/announcements/{id}
         [HttpPut("{id}")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] Announcement ann)
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Update(string id, [FromBody] UpdateAnnouncementRequest input)
         {
-            try { return Ok(await _service.UpdateAnnouncementAsync(id, ann)); }
-            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            var updated = await _service.UpdateAsync(Guid.Parse(id), input);
+            return Ok(new ApiDataResponse<Announcement> { Data = updated });
         }
 
+        // DELETE api/announcements/{id}
         [HttpDelete("{id}")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Delete(Guid id)
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> Remove(string id)
         {
-            try { return Ok(await _service.DeleteAnnouncementAsync(id)); }
-            catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            await _service.DeleteAsync(Guid.Parse(id));
+            return NoContent();
+        }
+
+        // ---- Helpers -----------------------------------------------------
+
+        // Mirrors optionalAuthenticate + req.user: returns null for a
+        // genuinely anonymous caller, or (userId, role) if a valid token
+        // was presented. Assumes standard ASP.NET JWT bearer behavior -
+        // no [Authorize] means the request always proceeds, and `User`
+        // gets populated only if a valid token was attached. If your JWT
+        // middleware is configured to hard-reject invalid (not just
+        // missing) tokens even here, this won't match optionalAuthenticate
+        // exactly - worth verifying against your actual middleware.
+        private (Guid UserId, string Role)? GetOptionalRequester()
+        {
+            if (User.Identity?.IsAuthenticated != true) return null;
+
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (idClaim == null || roleClaim == null) return null;
+
+            return (Guid.Parse(idClaim), roleClaim);
         }
     }
 }

@@ -7,24 +7,14 @@ namespace EduNex.Models
     public class ClassMaterial
     {
         public Guid Id { get; set; }
-
-        [JsonPropertyName("material_id")]
-        public string ExternalMaterialId { get; set; }
-
-        public string Title { get; set; }
-        public string Description { get; set; }
-
-        [JsonPropertyName("file_url")]
-        public string FileUrl { get; set; }
-
-        public DateTime CreatedAt { get; set; }
-        public DateTime UpdatedAt { get; set; }
-
-        [JsonPropertyName("batches")]
-        public List<Guid> BatchIds { get; set; } = new();
-
-        [JsonIgnore]
-        public List<BatchRef> Batches { get; set; } = new();
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? FileUrl { get; set; }
+        public Guid? MediaId { get; set; }
+        public Guid? CourseId { get; set; }
+        public Guid? CreatedBy { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
     }
 
     public class BatchRef

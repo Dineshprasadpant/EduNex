@@ -1,85 +1,186 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
 
 namespace EduNex.Models
 {
-    // Nested objects for populated fields
-    public class BatchRefDto
+    public class ListUsersQuery
     {
-        [JsonPropertyName("_id")]
-        public Guid Id { get; set; }
-        [JsonPropertyName("batch_name")]
-        public string BatchName { get; set; }
-    }
+        [Range(1, int.MaxValue, ErrorMessage = "Page must be a positive integer.")]
+        public int? Page { get; set; }
 
-    public class CourseRefDto
-    {
-        [JsonPropertyName("_id")]
-        public Guid Id { get; set; }
-        [JsonPropertyName("title")]
-        public string Title { get; set; }
-    }
+        [Range(1, 100, ErrorMessage = "Limit must be between 1 and 100.")]
+        public int? Limit { get; set; }
 
-    public class updateUserDto
-    {
-        [JsonPropertyName("_id")]
-        public Guid Id { get; set; }
-        public string Fullname { get; set; }
-        public string Email { get; set; }
-        public string Phone { get; set; }
-        public string Role { get; set; }
-        public string Status { get; set; }
-        public string Plan { get; set; }
-        public string Batch { get; set; }
-    }
-    public class UserDto
-    {
-        [JsonPropertyName("_id")]
-        public Guid Id { get; set; }
-        public string Fullname { get; set; }
-        public string Email { get; set; }
-        public string Phone { get; set; }
-        public string Role { get; set; }
-        public string Status { get; set; }
-        public string Plan { get; set; }
-        
-        [JsonPropertyName("batch")]
-        public object Batch { get; set; } // Can be Guid or BatchRefDto
-        
-        [JsonPropertyName("courseEnrolled")]
-        public object? CourseEnrolled { get; set; } // Can be Guid or CourseRefDto
-        
-        public string? CitizenshipImageUrl { get; set; }
-        
-        [JsonPropertyName("paymentImage")]
-        public List<List<string>>?PaymentImage { get; set; } // Matches [[String]]
-        
-        public string? PlanUpgradedFrom { get; set; }
-        public DateTime CreatedAt { get; set; }
-    }
-
-    public class AuthResponseDto
-    {
-        public bool Success { get; set; }
-        public string Token { get; set; }
-        public UserDto User { get; set; }
-    }
-    public class UserLoginDto
-    {
-        public string Email { get; set; }
-        public string Password { get; set; }
-    }
-    public class UserRegistrationDto
-    {
-        public string Fullname { get; set; }
+        [RegularExpression("^(student|teacher|admin)$", ErrorMessage = "Role must be student, teacher, or admin.")]
         public string? Role { get; set; }
-        public string Email { get; set; }
-        public string Phone { get; set; }
-        public string Password { get; set; }
-        public string Plan { get; set; }
-        public Guid CourseEnrolled { get; set; }
-        public string CitizenshipImageUrl { get; set; }
-        public string? PlatformPreference { get; set; }
+
+        public string? Search { get; set; }
+
+        public string? IsVerified { get; set; }
+    }
+    public class CreateUserRequest
+    {
+        [Required, StringLength(100, MinimumLength = 2)]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Required, StringLength(100, MinimumLength = 2)]
+        public string LastName { get; set; } = string.Empty;
+
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required, StringLength(30, MinimumLength = 10)]
+        public string Phone { get; set; } = string.Empty;
+
+        [Required, MinLength(6)]
+        public string Password { get; set; } = string.Empty;
+
+        [Required, RegularExpression("^(student|teacher)$", ErrorMessage = "Role must be student or teacher.")]
+        public string Role { get; set; } = string.Empty;
+
+        public bool? IsVerified { get; set; }
+        public string? Image { get; set; }
+
+        [RegularExpression("^(free|half|paid)$")]
+        public string? Plan { get; set; }
+        public Guid? CourseId { get; set; }
+        public string? PaymentImage { get; set; }
+        public string? CitizenshipCertificate { get; set; }
+        public string? Bio { get; set; }
+        [StringLength(200)]
+        public string? Specialization { get; set; }
+        public bool? EnableDisplayInAbout { get; set; }
+        public List<Guid>? CourseIds { get; set; }
+    }
+
+    public class UpdateUserRequest
+    {
+        [StringLength(100, MinimumLength = 2)]
+        public string? FirstName { get; set; }
+
+        [StringLength(100, MinimumLength = 2)]
+        public string? LastName { get; set; }
+
+        [EmailAddress]
+        public string? Email { get; set; }
+
+        [StringLength(30, MinimumLength = 10)]
+        public string? Phone { get; set; }
+
+        public string? Image { get; set; }
+        public bool? IsVerified { get; set; }
+        public bool? IsBlocked { get; set; }
+        public bool? LoginLocked { get; set; }
+
+        // student fields
+        [RegularExpression("^(free|half|paid)$")]
+        public string? Plan { get; set; }
+        public Guid? CourseId { get; set; }
+        public string? PaymentImage { get; set; }
+        public string? CitizenshipCertificate { get; set; }
+
+        // teacher fields
+        public string? Bio { get; set; }
+        [StringLength(200)]
+        public string? Specialization { get; set; }
+        public bool? EnableDisplayInAbout { get; set; }
+        public List<Guid>? CourseIds { get; set; }
+    }
+
+    public class ResetPasswordRequest
+    {
+        [Required, MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+        public string NewPassword { get; set; } = string.Empty;
+    }
+
+    public class BlockUserRequest
+    {
+        [Required]
+        public bool Blocked { get; set; }
+    }
+
+    public class UpdateProfileRequest
+    {
+        public string? Bio { get; set; }
+        [StringLength(200)]
+        public string? Specialization { get; set; }
+    }
+
+    public class UpdateEnrollmentRequest
+    {
+        public Guid? CourseId { get; set; }
+        public string? PaymentImage { get; set; }
+        public string? CitizenshipCertificate { get; set; }
+    }
+
+  
+    public class UserListItemDto
+    {
+        public Guid Id { get; set; }
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public string? Image { get; set; }
+        public bool IsVerified { get; set; }
+        public bool IsBlocked { get; set; }
+        public bool LoginLocked { get; set; }
+        public DateTimeOffset? LastLoginAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
+
+    public class TeacherProfileWithCoursesDto
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public string? Bio { get; set; }
+        public string? Specialization { get; set; }
+        public bool EnableDisplayInAbout { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+        public List<TeacherCourseDto> Courses { get; set; } = new();
+    }
+
+    public class TeacherProfileDto
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public string? Bio { get; set; }
+        public string? Specialization { get; set; }
+        public bool EnableDisplayInAbout { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
+    public class TeacherCourseDto
+    {
+        public Guid Id { get; set; }
+        public Guid TeacherProfileId { get; set; }
+        public Guid CourseId { get; set; }
+        public DateTimeOffset AssignedAt { get; set; }
+    }
+
+
+    public class TeacherAboutDto
+    {
+        public Guid Id { get; set; }
+        public Guid UserId { get; set; }
+        public string? Bio { get; set; }
+        public string? Specialization { get; set; }
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string? Image { get; set; }
+        public List<TeacherAboutCourseDto> Courses { get; set; } = new();
+    }
+
+    public class TeacherAboutCourseDto
+    {
+        public Guid CourseId { get; set; }
+        public string Title { get; set; } = string.Empty;
+    }
+
+    public class ResetPasswordResultDto
+    {
+        public string Message { get; set; } = "Password reset successfully";
     }
 }

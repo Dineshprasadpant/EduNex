@@ -1,7 +1,8 @@
 ﻿using EduNex.DataAccess;
 using EduNex.Services;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi.Models;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace EduNex.API
 {
     public static class DependencyInjection
@@ -14,10 +15,10 @@ namespace EduNex.API
                 ?? throw new Exception("Connection string not found.");
             // Controllers
             services.AddControllers()
-    .AddJsonOptions(options =>
+    .AddJsonOptions(o =>
     {
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     });
             services.AddEndpointsApiExplorer();
 

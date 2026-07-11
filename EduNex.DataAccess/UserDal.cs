@@ -1,30 +1,48 @@
-﻿using EduNex.Models;
-using Microsoft.Data.SqlClient;
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Threading.Tasks;
 using Dapper;
-using Microsoft.AspNetCore.Http.Features;
-
+using Microsoft.Data.SqlClient;
+using EduNex.Models;
 namespace EduNex.DataAccess
 {
     public interface IUserDal
     {
-        Task<User> GetUserByEmailAsync(string email);
-        Task<User> GetUserByIdAsync(Guid id);
-        Task<UserDto> GetUserById(Guid id);
-        Task<Guid> CreateUserAsync(User user);
-        Task<bool> UpdateUserStatusAsync(Guid userId, Guid batchId, UserStatus status);
-        Task SavePaymentImageAsync(Guid userId, string imageUrl, int batchIndex);
+        Task<(List<UserListItemDto> Data, int Total)> ListAsync(
+            string? role, string? search, bool? isVerified, int limit, int offset);
 
-        // Management
-        Task<(IEnumerable<UserDto> Users, int Total)> SearchByFullnameAsync(string searchTerm, int page, int limit);
-        Task<IEnumerable<dynamic>> GetUsersAsync(string status);
-        Task<bool> UpdateUserAsync(updateUserDto updateData);
-        Task<bool> DeleteUserAsync(Guid id);
-        Task<bool> UpdatePasswordAsync(Guid id, string passwordHash);
-        Task<bool> UpdateUserPlanAsync(Guid id, string plan, string planUpgradedFrom);
+        Task<User?> GetByIdAsync(Guid id);
+        Task<bool> EmailExistsAsync(string email, Guid? excludeId = null);
+        Task<bool> PhoneExistsAsync(string phone, Guid? excludeId = null);
+        Task<User> InsertUserAsync(User user);
+        Task<User?> UpdateUserAsync(User user);
+        Task<User?> SetVerifiedAsync(Guid id);
+        Task<User?> SetBlockedAsync(Guid id, bool blocked);
+        Task<User?> UnlockAsync(Guid id);
+        Task UpdatePasswordHashAsync(Guid id, string passwordHash);
+        Task RevokeAllRefreshTokensAsync(Guid userId);
 
-        // Relational updates
-        Task IncrementCourseStudentCountAsync(Guid courseId);
+        Task<StudentProfile?> GetStudentProfileByUserIdAsync(Guid userId);
+        Task<StudentProfile> InsertStudentProfileAsync(StudentProfile profile);
+        Task<StudentProfile?> UpdateStudentProfileFieldsAsync(
+            Guid userId, string? plan, Guid? courseId, string? paymentImage, string? citizenshipCertificate);
+        Task SetStudentInitialVerificationAsync(Guid userId);
+
+        Task<TeacherProfile?> GetTeacherProfileByUserIdAsync(Guid userId);
+        Task<TeacherProfile> InsertTeacherProfileAsync(TeacherProfile profile);
+        Task<TeacherProfile?> UpdateTeacherProfileFieldsAsync(
+            Guid userId, string? bio, string? specialization, bool? enableDisplayInAbout);
+
+        Task<List<TeacherCourseDto>> GetTeacherCoursesAsync(Guid teacherProfileId);
+        Task InsertTeacherCoursesAsync(Guid teacherProfileId, IEnumerable<Guid> courseIds);
+        Task DeleteTeacherCoursesAsync(Guid teacherProfileId);
+
+        Task<Course?> GetCourseByIdAsync(Guid id);
+        Task<List<TeacherAboutDto>> GetTeachersForAboutAsync();
     }
+
     public class UserDal : IUserDal
     {
         private readonly string _connectionString;
@@ -34,206 +52,352 @@ namespace EduNex.DataAccess
             _connectionString = connectionString;
         }
 
-        public async Task<User> GetUserByEmailAsync(string email)
+        private IDbConnection CreateConnection() => new SqlConnection(_connectionString);
+
+        // ---- List / read -------------------------------------------------
+
+        public async Task<(List<UserListItemDto> Data, int Total)> ListAsync(
+            string? role, string? search, bool? isVerified, int limit, int offset)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = "SELECT * FROM Users WHERE Email = @Email";
-                return await conn.QueryFirstOrDefaultAsync<User>(sql, new { Email = email });
-            }
+            using IDbConnection db = CreateConnection();
+
+            var conditions = new List<string>();
+            if (role != null) conditions.Add("role = @Role");
+            if (isVerified.HasValue) conditions.Add("is_verified = @IsVerified");
+            if (!string.IsNullOrEmpty(search))
+                conditions.Add("(first_name LIKE @Search OR last_name LIKE @Search OR email LIKE @Search)");
+
+            var whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+            var searchPattern = string.IsNullOrEmpty(search) ? null : $"%{search}%";
+
+            var rowsSql = $@"
+                SELECT id, first_name, last_name, email, phone, role, image,
+                       is_verified, is_blocked, login_locked, last_login_at, created_at, updated_at
+                FROM dbo.users
+                {whereClause}
+                ORDER BY created_at DESC
+                OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
+
+            var countSql = $"SELECT COUNT(*) FROM dbo.users {whereClause};";
+
+            var parameters = new { Role = role, IsVerified = isVerified, Search = searchPattern, Offset = offset, Limit = limit };
+
+            var rows = (await db.QueryAsync<UserListItemDto>(rowsSql, parameters)).ToList();
+            var total = await db.ExecuteScalarAsync<int>(countSql, parameters);
+
+            return (rows, total);
         }
 
-        public async Task<User> GetUserByIdAsync(Guid id)
+        public async Task<User?> GetByIdAsync(Guid id)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = "SELECT * FROM Users WHERE Id = @Id";
-                return await conn.QueryFirstOrDefaultAsync<User>(sql, new { Id = id });
-            }
-        }
-        public async Task<UserDto> GetUserById(Guid id)
-        {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = "SELECT * FROM Users WHERE Id = @Id";
-                return await conn.QueryFirstOrDefaultAsync<UserDto>(sql, new { Id = id });
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT * FROM dbo.users WHERE id = @Id";
+            return await db.QuerySingleOrDefaultAsync<User>(sql, new { Id = id });
         }
 
-        public async Task<Guid> CreateUserAsync(User user)
+        public async Task<bool> EmailExistsAsync(string email, Guid? excludeId = null)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = @"
-                    INSERT INTO Users (Id, Fullname, Email, Phone, PasswordHash, Role, Status, 
-                                     PlatformPreference, CourseEnrolledId, CitizenshipImageUrl, 
-                                     PlanType, CreatedAt)
-                    VALUES (@Id, @Fullname, @Email, @Phone, @PasswordHash, @Role, @Status, 
-                            @PlatformPreference, @CourseEnrolledId, @CitizenshipImageUrl, 
-                            @PlanType, @CreatedAt);
-                    SELECT @Id;";
-
-                if (user.Id == Guid.Empty) user.Id = Guid.NewGuid();
-
-                await conn.ExecuteAsync(sql, new
-                {
-                    user.Id,
-                    user.Fullname,
-                    user.Email,
-                    user.Phone,
-                    user.PasswordHash,
-                    Role = user.Role.ToString().ToLower(),
-                    Status = user.Status.ToString().ToLower(),
-                    PlatformPreference = user.PlatformPreference?.ToString().ToLower(),
-                    user.CourseEnrolledId,
-                    user.CitizenshipImageUrl,
-                    PlanType = user.Plan.ToString().ToLower(),
-                    user.CreatedAt
-                });
-
-                return user.Id;
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT COUNT(1) FROM dbo.users WHERE email = @Email AND (@ExcludeId IS NULL OR id <> @ExcludeId)";
+            var count = await db.ExecuteScalarAsync<int>(sql, new { Email = email, ExcludeId = excludeId });
+            return count > 0;
         }
 
-        public async Task<bool> UpdateUserStatusAsync(Guid userId, Guid batchId, UserStatus status)
+        public async Task<bool> PhoneExistsAsync(string phone, Guid? excludeId = null)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = "UPDATE Users SET BatchId = @BatchId, Status = @Status WHERE Id = @Id";
-                var rows = await conn.ExecuteAsync(sql, new
-                {
-                    Id = userId,
-                    BatchId = batchId,
-                    Status = status.ToString().ToLower()
-                });
-                return rows > 0;
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT COUNT(1) FROM dbo.users WHERE phone = @Phone AND (@ExcludeId IS NULL OR id <> @ExcludeId)";
+            var count = await db.ExecuteScalarAsync<int>(sql, new { Phone = phone, ExcludeId = excludeId });
+            return count > 0;
         }
 
-        public async Task SavePaymentImageAsync(Guid userId, string imageUrl, int batchIndex)
+        // ---- User write ---------------------------------------------------
+
+        public async Task<User> InsertUserAsync(User user)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = "INSERT INTO UserPaymentImages (UserId, ImageUrl, BatchIndex) VALUES (@UserId, @ImageUrl, @BatchIndex)";
-                await conn.ExecuteAsync(sql, new { UserId = userId, ImageUrl = imageUrl, BatchIndex = batchIndex });
-            }
+            using IDbConnection db = CreateConnection();
+
+            user.Id = Guid.NewGuid();
+            user.CreatedAt = DateTimeOffset.UtcNow;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            const string sql = @"
+                INSERT INTO dbo.users
+                    (id, first_name, last_name, email, phone, password_hash, role, image,
+                     is_verified, is_blocked, login_locked, failed_login_attempts, created_at, updated_at)
+                OUTPUT INSERTED.*
+                VALUES
+                    (@Id, @FirstName, @LastName, @Email, @Phone, @PasswordHash, @Role, @Image,
+                     @IsVerified, @IsBlocked, @LoginLocked, @FailedLoginAttempts, @CreatedAt, @UpdatedAt);";
+
+            return await db.QuerySingleAsync<User>(sql, user);
         }
 
-        public async Task<(IEnumerable<UserDto> Users, int Total)> SearchByFullnameAsync(string searchTerm, int page, int limit)
+        public async Task<User?> UpdateUserAsync(User user)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = @"
-                    SELECT COUNT(*) FROM Users WHERE Fullname LIKE @Search;
-                    SELECT u.*, b.BatchName, c.Title as CourseTitle
-                    FROM Users u
-                    LEFT JOIN Batches b ON u.BatchId = b.Id
-                    LEFT JOIN Courses c ON u.CourseEnrolledId = c.Id
-                    WHERE u.Fullname LIKE @Search
-                    ORDER BY u.Fullname
-                    OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
+            using IDbConnection db = CreateConnection();
 
-                using (var multi = await conn.QueryMultipleAsync(sql, new
-                {
-                    Search = $"%{searchTerm}%",
-                    Offset = (page - 1) * limit,
-                    Limit = limit
-                }))
-                {
-                    var total = await multi.ReadFirstAsync<int>();
-                    var items=await multi.ReadAsync<UserDto>();
-                    return (items, total);
-                }
-            }
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            const string sql = @"
+                UPDATE dbo.users
+                SET first_name = @FirstName,
+                    last_name = @LastName,
+                    email = @Email,
+                    phone = @Phone,
+                    image = @Image,
+                    is_verified = @IsVerified,
+                    is_blocked = @IsBlocked,
+                    login_locked = @LoginLocked,
+                    updated_at = @UpdatedAt
+                OUTPUT INSERTED.*
+                WHERE id = @Id;";
+
+            return await db.QuerySingleOrDefaultAsync<User>(sql, user);
         }
 
-        public async Task<IEnumerable<dynamic>> GetUsersAsync(string status)
+        public async Task<User?> SetVerifiedAsync(Guid id)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = @"
-        SELECT
-    u.Id AS [_id],
-    u.Fullname AS [fullname],
-    u.Role AS [role],
-    u.Email AS [email],
-    u.PlatformPreference AS [platformPreference],
-    u.Phone AS [phone],
-    u.Status AS [status],
-
-    c.Id AS [CourseId],
-    c.Title AS [CourseTitle],
-
-    u.CitizenshipImageUrl AS [citizenshipImageUrl],
-    u.PlanType AS [plan],
-    u.CreatedAt AS [createdAt]
-
-FROM Users u
-LEFT JOIN Courses c
-    ON u.CourseEnrolledId = c.Id
-WHERE u.Status = @status
-  AND u.Role = 'user';";
-
-                return await conn.QueryAsync<dynamic>(sql, new {status});
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                UPDATE dbo.users
+                SET is_verified = 1, updated_at = @Now
+                OUTPUT INSERTED.*
+                WHERE id = @Id;";
+            return await db.QuerySingleOrDefaultAsync<User>(sql, new { Id = id, Now = DateTimeOffset.UtcNow });
         }
 
-        public async Task<IEnumerable<dynamic>> GetVerifiedUsersAsync()
+        public async Task<User?> SetBlockedAsync(Guid id, bool blocked)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = @"
-                    SELECT u.*, b.BatchName, c.Title as CourseTitle
-                    FROM Users u
-                    LEFT JOIN Batches b ON u.BatchId = b.Id
-                    LEFT JOIN Courses c ON u.CourseEnrolledId = c.Id
-                    WHERE u.Status = 'verified';";
-                return await conn.QueryAsync<dynamic>(sql);
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                UPDATE dbo.users
+                SET is_blocked = @Blocked, updated_at = @Now
+                OUTPUT INSERTED.*
+                WHERE id = @Id;";
+            return await db.QuerySingleOrDefaultAsync<User>(sql, new { Id = id, Blocked = blocked, Now = DateTimeOffset.UtcNow });
         }
 
-        public async Task<bool> UpdateUserAsync(updateUserDto updateData)
+        public async Task<User?> UnlockAsync(Guid id)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                // Simple implementation, in real app would use a more dynamic Dapper builder
-                const string sql = "UPDATE Users SET Fullname = @Fullname, Email = @Email, Phone = @Phone, Role = @Role, Status = @Status, PlanType = @Plan, BatchId = @Batch WHERE Id = @Id;";
-                return await conn.ExecuteAsync(sql,updateData ) > 0;
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                UPDATE dbo.users
+                SET login_locked = 0, failed_login_attempts = 0, updated_at = @Now
+                OUTPUT INSERTED.*
+                WHERE id = @Id;";
+            return await db.QuerySingleOrDefaultAsync<User>(sql, new { Id = id, Now = DateTimeOffset.UtcNow });
         }
 
-        public async Task<bool> DeleteUserAsync(Guid id)
+        public async Task UpdatePasswordHashAsync(Guid id, string passwordHash)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                return await conn.ExecuteAsync("DELETE FROM Users WHERE Id = @Id", new { Id = id }) > 0;
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = "UPDATE dbo.users SET password_hash = @PasswordHash, updated_at = @Now WHERE id = @Id";
+            await db.ExecuteAsync(sql, new { Id = id, PasswordHash = passwordHash, Now = DateTimeOffset.UtcNow });
         }
 
-        public async Task<bool> UpdatePasswordAsync(Guid id, string passwordHash)
+        public async Task RevokeAllRefreshTokensAsync(Guid userId)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                return await conn.ExecuteAsync("UPDATE Users SET PasswordHash = @Hash WHERE Id = @Id", new { Id = id, Hash = passwordHash }) > 0;
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = "UPDATE dbo.refresh_tokens SET is_revoked = 1 WHERE user_id = @UserId";
+            await db.ExecuteAsync(sql, new { UserId = userId });
         }
 
-        public async Task<bool> UpdateUserPlanAsync(Guid id, string plan, string planUpgradedFrom)
+        // ---- Student profile ------------------------------------------------
+
+        public async Task<StudentProfile?> GetStudentProfileByUserIdAsync(Guid userId)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            {
-                const string sql = "UPDATE Users SET PlanType = @Plan, PlanUpgradedFrom = @OldPlan, Status = 'unverified' WHERE Id = @Id";
-                return await conn.ExecuteAsync(sql, new { Id = id, Plan = plan, OldPlan = planUpgradedFrom }) > 0;
-            }
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT * FROM dbo.student_profiles WHERE user_id = @UserId";
+            return await db.QuerySingleOrDefaultAsync<StudentProfile>(sql, new { UserId = userId });
         }
 
-        public async Task IncrementCourseStudentCountAsync(Guid courseId)
+        public async Task<StudentProfile> InsertStudentProfileAsync(StudentProfile profile)
         {
-            using (SqlConnection conn = new SqlConnection(_connectionString))
+            using IDbConnection db = CreateConnection();
+
+            profile.Id = Guid.NewGuid();
+            profile.CreatedAt = DateTimeOffset.UtcNow;
+            profile.UpdatedAt = DateTimeOffset.UtcNow;
+
+            const string sql = @"
+                INSERT INTO dbo.student_profiles
+                    (id, user_id, plan, course_id, payment_image, citizenship_certificate,
+                     initial_verification, created_at, updated_at)
+                OUTPUT INSERTED.*
+                VALUES
+                    (@Id, @UserId, @Plan, @CourseId, @PaymentImage, @CitizenshipCertificate,
+                     @InitialVerification, @CreatedAt, @UpdatedAt);";
+
+            return await db.QuerySingleAsync<StudentProfile>(sql, profile);
+        }
+
+        public async Task<StudentProfile?> UpdateStudentProfileFieldsAsync(
+            Guid userId, string? plan, Guid? courseId, string? paymentImage, string? citizenshipCertificate)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                UPDATE dbo.student_profiles
+                SET plan = @Plan,
+                    course_id = @CourseId,
+                    payment_image = @PaymentImage,
+                    citizenship_certificate = @CitizenshipCertificate,
+                    updated_at = @Now
+                OUTPUT INSERTED.*
+                WHERE user_id = @UserId;";
+
+            return await db.QuerySingleOrDefaultAsync<StudentProfile>(sql, new
             {
-                await conn.ExecuteAsync("UPDATE Courses SET StudentsEnrolled = StudentsEnrolled + 1 WHERE Id = @Id", new { Id = courseId });
+                UserId = userId,
+                Plan = plan,
+                CourseId = courseId,
+                PaymentImage = paymentImage,
+                CitizenshipCertificate = citizenshipCertificate,
+                Now = DateTimeOffset.UtcNow
+            });
+        }
+
+        public async Task SetStudentInitialVerificationAsync(Guid userId)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                UPDATE dbo.student_profiles
+                SET initial_verification = 1, updated_at = @Now
+                WHERE user_id = @UserId;";
+            await db.ExecuteAsync(sql, new { UserId = userId, Now = DateTimeOffset.UtcNow });
+        }
+
+        // ---- Teacher profile ------------------------------------------------
+
+        public async Task<TeacherProfile?> GetTeacherProfileByUserIdAsync(Guid userId)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT * FROM dbo.teacher_profiles WHERE user_id = @UserId";
+            return await db.QuerySingleOrDefaultAsync<TeacherProfile>(sql, new { UserId = userId });
+        }
+
+        public async Task<TeacherProfile> InsertTeacherProfileAsync(TeacherProfile profile)
+        {
+            using IDbConnection db = CreateConnection();
+
+            profile.Id = Guid.NewGuid();
+            profile.CreatedAt = DateTimeOffset.UtcNow;
+            profile.UpdatedAt = DateTimeOffset.UtcNow;
+
+            const string sql = @"
+                INSERT INTO dbo.teacher_profiles
+                    (id, user_id, bio, specialization, enable_display_in_about, created_at, updated_at)
+                OUTPUT INSERTED.*
+                VALUES
+                    (@Id, @UserId, @Bio, @Specialization, @EnableDisplayInAbout, @CreatedAt, @UpdatedAt);";
+
+            return await db.QuerySingleAsync<TeacherProfile>(sql, profile);
+        }
+
+        public async Task<TeacherProfile?> UpdateTeacherProfileFieldsAsync(
+            Guid userId, string? bio, string? specialization, bool? enableDisplayInAbout)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                UPDATE dbo.teacher_profiles
+                SET bio = @Bio,
+                    specialization = @Specialization,
+                    enable_display_in_about = @EnableDisplayInAbout,
+                    updated_at = @Now
+                OUTPUT INSERTED.*
+                WHERE user_id = @UserId;";
+
+            return await db.QuerySingleOrDefaultAsync<TeacherProfile>(sql, new
+            {
+                UserId = userId,
+                Bio = bio,
+                Specialization = specialization,
+                EnableDisplayInAbout = enableDisplayInAbout ?? false,
+                Now = DateTimeOffset.UtcNow
+            });
+        }
+
+        // ---- Teacher courses ------------------------------------------------
+
+        public async Task<List<TeacherCourseDto>> GetTeacherCoursesAsync(Guid teacherProfileId)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT * FROM dbo.teacher_courses WHERE teacher_profile_id = @TeacherProfileId";
+            var rows = await db.QueryAsync<TeacherCourseDto>(sql, new { TeacherProfileId = teacherProfileId });
+            return rows.ToList();
+        }
+
+        public async Task InsertTeacherCoursesAsync(Guid teacherProfileId, IEnumerable<Guid> courseIds)
+        {
+            var ids = courseIds.ToList();
+            if (ids.Count == 0) return;
+
+            using IDbConnection db = CreateConnection();
+            const string sql = @"
+                INSERT INTO dbo.teacher_courses (id, teacher_profile_id, course_id, assigned_at)
+                VALUES (@Id, @TeacherProfileId, @CourseId, @AssignedAt);";
+
+            var now = DateTimeOffset.UtcNow;
+            var rows = ids.Select(courseId => new
+            {
+                Id = Guid.NewGuid(),
+                TeacherProfileId = teacherProfileId,
+                CourseId = courseId,
+                AssignedAt = now
+            });
+
+            await db.ExecuteAsync(sql, rows);
+        }
+
+        public async Task DeleteTeacherCoursesAsync(Guid teacherProfileId)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = "DELETE FROM dbo.teacher_courses WHERE teacher_profile_id = @TeacherProfileId";
+            await db.ExecuteAsync(sql, new { TeacherProfileId = teacherProfileId });
+        }
+
+        // ---- Courses (for verification mail content) --------------------
+
+        public async Task<Course?> GetCourseByIdAsync(Guid id)
+        {
+            using IDbConnection db = CreateConnection();
+            const string sql = "SELECT * FROM dbo.courses WHERE id = @Id";
+            return await db.QuerySingleOrDefaultAsync<Course>(sql, new { Id = id });
+        }
+
+        // ---- Public "about" listing ---------------------------------------
+
+        public async Task<List<TeacherAboutDto>> GetTeachersForAboutAsync()
+        {
+            using IDbConnection db = CreateConnection();
+
+            const string profilesSql = @"
+                SELECT
+                    tp.id, tp.user_id, tp.bio, tp.specialization,
+                    u.first_name, u.last_name, u.image
+                FROM dbo.teacher_profiles tp
+                INNER JOIN dbo.users u ON u.id = tp.user_id
+                WHERE tp.enable_display_in_about = 1;";
+
+            var profiles = (await db.QueryAsync<TeacherAboutDto>(profilesSql)).ToList();
+            if (profiles.Count == 0) return profiles;
+
+            // Same N+1 pattern as usersRepository.findTeachersForAbout
+            // (Promise.all over profiles.map(...)) - not optimized into a
+            // single join here on purpose, to keep behavior identical.
+            const string coursesSql = @"
+                SELECT tc.course_id AS CourseId, c.title AS Title
+                FROM dbo.teacher_courses tc
+                INNER JOIN dbo.courses c ON c.id = tc.course_id
+                WHERE tc.teacher_profile_id = @TeacherProfileId;";
+
+            foreach (var profile in profiles)
+            {
+                var courses = await db.QueryAsync<TeacherAboutCourseDto>(coursesSql, new { TeacherProfileId = profile.Id });
+                profile.Courses = courses.ToList();
             }
+
+            return profiles;
         }
     }
-
 }

@@ -1,51 +1,52 @@
-﻿using EduNex.DataAccess;
+﻿using System;
+using System.Threading.Tasks;
+using EduNex.DataAccess;
 using EduNex.Models;
+
 namespace EduNex.Services
 {
     public interface IAdvertisementService
     {
-        Task<object> GetAdvertisementsAsync(int page, int limit);
-        Task<object> GetAdvertisementAsync(Guid id);
-        Task<object> CreateAdAsync(Advertisement ad);
-        Task<object> UpdateAdAsync(Guid id, Advertisement ad);
-        Task DeleteAdAsync(Guid id);
+        Task<PagedResult<AdvertisementDto>> ListAsync(bool? isActive, int page, int limit, int offset);
+        Task<AdvertisementDto> GetByIdAsync(Guid id);
+        Task<AdvertisementDto> CreateAsync(CreateAdvertisementRequest input);
+        Task<AdvertisementDto> UpdateAsync(Guid id, UpdateAdvertisementRequest input);
+        Task DeleteAsync(Guid id);
     }
 
     public class AdvertisementService : IAdvertisementService
     {
         private readonly IAdvertisementDal _repo;
+
         public AdvertisementService(IAdvertisementDal repo)
         {
             _repo = repo;
         }
 
-        public async Task<object> GetAdvertisementsAsync(int page, int limit)
+        public Task<PagedResult<AdvertisementDto>> ListAsync(bool? isActive, int page, int limit, int offset) =>
+            _repo.GetAllAsync(isActive, page, limit, offset);
+
+        public async Task<AdvertisementDto> GetByIdAsync(Guid id) =>
+            await _repo.GetByIdAsync(id) ?? throw new NotFoundException("Advertisement not found");
+
+        public async Task<AdvertisementDto> CreateAsync(CreateAdvertisementRequest input) =>
+            await _repo.CreateAsync(input);
+
+        public async Task<AdvertisementDto> UpdateAsync(Guid id, UpdateAdvertisementRequest input)
         {
-            var (items, total) = await _repo.GetPaginatedAsync(page, limit);
-            return new
-            {
-                totalObjects = total,
-                totalPages = (int)Math.Ceiling((double)total / limit),
-                currentPage = page,
-                currentObjects = items
-            };
+            if (!await _repo.ExistsAsync(id))
+                throw new NotFoundException("Advertisement not found");
+
+            return await _repo.UpdateAsync(id, input)
+                ?? throw new NotFoundException("Advertisement not found");
         }
 
-        public async Task<object> GetAdvertisementAsync(Guid id) => await _repo.GetByIdAsync(id);
-
-        public async Task<object> CreateAdAsync(Advertisement ad)
+        public async Task DeleteAsync(Guid id)
         {
-            ad.CreatedAt = ad.UpdatedAt = DateTime.UtcNow;
-            var id = await _repo.CreateAsync(ad);
-            return await _repo.GetByIdAsync(id);
-        }
+            if (!await _repo.ExistsAsync(id))
+                throw new NotFoundException("Advertisement not found");
 
-        public async Task<object> UpdateAdAsync(Guid id, Advertisement ad)
-        {
-            await _repo.UpdateAsync(id, ad);
-            return await _repo.GetByIdAsync(id);
+            await _repo.DeleteAsync(id);
         }
-
-        public async Task DeleteAdAsync(Guid id) => await _repo.DeleteAsync(id);
     }
 }

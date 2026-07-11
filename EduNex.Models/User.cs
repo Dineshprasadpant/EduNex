@@ -30,29 +30,31 @@ namespace EduNex.Models
         Half,
         Free
     }
+    public class UserAuthState
+    {
+        public Guid Id { get; set; }
+        public bool IsBlocked { get; set; }
+    }
 
     public class User
     {
-        [JsonPropertyName("_id")]
         public Guid Id { get; set; }
-        public string Fullname { get; set; }
-        public string Email { get; set; }
-        public string Phone { get; set; }
-        public string PasswordHash { get; set; }
-        public UserRole Role { get; set; }
-        public UserStatus Status { get; set; } = UserStatus.Unverified;
-        public PlatformPreference? PlatformPreference { get; set; }
-        public Guid? BatchId { get; set; }
-        public Guid CourseEnrolledId { get; set; }
-        public string CitizenshipImageUrl { get; set; }
-        public List<string> PaymentImages { get; set; } = new List<string>();
-        public string PlanUpgradedFrom { get; set; }
-        public UserPlan Plan { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-        // Navigation Properties
-        public List<UserExamPerformance> ExamsAttended { get; set; } = new List<UserExamPerformance>();
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string PasswordHash { get; set; } = string.Empty;
+        public string Role { get; set; } = "student";
+        public string? Image { get; set; }
+        public bool IsVerified { get; set; }
+        public bool IsBlocked { get; set; }
+        public bool LoginLocked { get; set; }
+        public int FailedLoginAttempts { get; set; }
+        public DateTimeOffset? LastLoginAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
     }
+
 
     public class UserExamPerformance
     {

@@ -6,6 +6,21 @@ namespace EduNex.Models
 {
     public class Event
     {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Category { get; set; } = "Other";
+        public DateTimeOffset EventDate { get; set; }
+        public string? Address { get; set; }
+        public string Privacy { get; set; } = "public";
+        public Guid? CourseId { get; set; }
+        public string? Image { get; set; }
+        public Guid? MediaId { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
+    public class EventMain
+    {
         [JsonPropertyName("_id")]
         public Guid Id { get; set; }
         
