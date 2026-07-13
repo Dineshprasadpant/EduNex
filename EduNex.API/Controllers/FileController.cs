@@ -1,6 +1,5 @@
 using EduNex.Services;
 using Microsoft.AspNetCore.Mvc;
-using EduNex.Services;
 namespace EduNex.API.Controllers
 {
     [ApiController]

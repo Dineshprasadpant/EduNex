@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Microsoft.Data.SqlClient;
 using EduNex.Models;
+using EduNex.Api.DataAccess;
 
 namespace EduNex.DataAccess
 {
@@ -31,21 +32,13 @@ namespace EduNex.DataAccess
         Task<Guid?> FindStudentCourseIdAsync(Guid userId);
     }
 
-    public class AnnouncementDal : IAnnouncementDal
+    public class AnnouncementDal(IDbConnectionFactory _dbconn) : IAnnouncementDal
     {
-        private readonly string _connectionString;
-
-        public AnnouncementDal(string connectionString)
-        {
-            _connectionString = connectionString;
-        }
-
-        private SqlConnection CreateConnection() => new SqlConnection(_connectionString);
 
         public async Task<(List<AnnouncementDto> Data, int Total)> FindAllAsync(
             AnnouncementFilters filters, int limit, int offset)
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
 
             var conditions = new List<string>();
             if (!string.IsNullOrEmpty(filters.Search)) conditions.Add("a.title LIKE @Search");
@@ -97,7 +90,7 @@ namespace EduNex.DataAccess
 
         public async Task<AnnouncementDetailDto?> FindByIdAsync(Guid id)
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
 
             const string sql = @"
                 SELECT
@@ -133,8 +126,8 @@ namespace EduNex.DataAccess
 
         public async Task<Announcement> CreateAsync(Announcement announcement, List<Guid>? resourceMediaIds)
         {
-            using var db = CreateConnection();
-            await db.OpenAsync(); // required before BeginTransaction
+            using var db = _dbconn.CreateConnection();
+            db.Open();
             using var transaction = db.BeginTransaction();
 
             try
@@ -180,8 +173,8 @@ namespace EduNex.DataAccess
 
         public async Task<Announcement?> UpdateAsync(Guid id, Announcement mergedFields, List<Guid>? resourceMediaIds)
         {
-            using var db = CreateConnection();
-            await db.OpenAsync();
+            using var db = _dbconn.CreateConnection();
+            db.Open();
             using var transaction = db.BeginTransaction();
 
             try
@@ -237,28 +230,28 @@ namespace EduNex.DataAccess
 
         public async Task RemoveAsync(Guid id)
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
             const string sql = "DELETE FROM dbo.announcements WHERE id = @Id";
             await db.ExecuteAsync(sql, new { Id = id });
         }
 
         public async Task<List<string>> GetSubscriberEmailsAsync()
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
             var rows = await db.QueryAsync<string>("SELECT email FROM dbo.subscribers");
             return rows.ToList();
         }
 
         public async Task<List<string>> GetAllUserEmailsAsync()
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
             var rows = await db.QueryAsync<string>("SELECT email FROM dbo.users WHERE is_verified = 1");
             return rows.ToList();
         }
 
         public async Task<List<string>> GetEnrolledUserEmailsAsync(Guid courseId)
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
             const string sql = @"
                 SELECT u.email
                 FROM dbo.student_profiles sp
@@ -270,7 +263,7 @@ namespace EduNex.DataAccess
 
         public async Task<Guid?> FindStudentCourseIdAsync(Guid userId)
         {
-            using IDbConnection db = CreateConnection();
+            using IDbConnection db = _dbconn.CreateConnection();
             const string sql = "SELECT TOP 1 course_id FROM dbo.student_profiles WHERE user_id = @UserId";
             return await db.QuerySingleOrDefaultAsync<Guid?>(sql, new { UserId = userId });
         }

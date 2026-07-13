@@ -1,11 +1,19 @@
 using EduNex.API;
+using EduNex.DataAccess;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new Exception("DefaultConnection not found.");
+// Register application services
 builder.Services.AddApplicationServices(builder.Configuration);
+
+// Register JWT separately
 builder.Services.AddJwtAuthentication(builder.Configuration);
 
+// Custom validation response
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -25,9 +33,10 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
             errors
         };
 
-        return new UnprocessableEntityObjectResult(body); // 422, matches Express
+        return new UnprocessableEntityObjectResult(body);
     };
 });
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -35,10 +44,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+DatabaseSchema.Setup(connectionString);
+DatabaseSchema.Update(connectionString);
 app.UseCors("AllowOrigins");
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 app.UseStaticFiles();
-//app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -24,11 +24,11 @@ namespace EduNex.Services
 
         public async Task<object> AddSubscriberAsync(string email)
         {
-            if (await _dal.ExistsAsync(email))
-                throw new Exception("Email already subscribed.");
+            //if (await _dal.ExistsAsync(email))
+            //    throw new Exception("Email already subscribed.");
 
-            await _dal.CreateAsync(email);
-            await _analytics.TrackSubscriberAsync();
+            //await _dal.CreateAsync(email);
+            //await _analytics.();
             return new { message = "Subscriber added successfully." };
         }
 

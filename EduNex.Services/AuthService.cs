@@ -1,5 +1,4 @@
 ﻿using EduNex.Api.DataAccess;
-using EduNex.Api.Model;
 using EduNex.Models;
 using EduNex.Services;
 using Microsoft.Extensions.Configuration;

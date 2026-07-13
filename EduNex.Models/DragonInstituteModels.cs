@@ -1,25 +1,3 @@
-// ============================================================================
-// Dragon Institute - Dapper POCO Models
-// Matches dragon_institute_sqlexpress.sql exactly (31 tables).
-//
-// IMPORTANT - required one-time setup for Dapper to map snake_case columns
-// (first_name, created_at, ...) onto these PascalCase properties (FirstName,
-// CreatedAt, ...). Add this ONCE at application startup (e.g. top of
-// Program.cs, before the app runs):
-//
-//     Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
-//
-// Without this line, Dapper will silently leave PascalCase properties as
-// null/default because it only does exact/case-insensitive matches by
-// default. This single flag makes every model below work with plain
-// "SELECT * FROM table_name" style queries with no column aliasing needed.
-//
-// Nullability follows the SQL schema exactly: NOT NULL columns are
-// non-nullable C# types, nullable columns use ? (Guid?, string?, etc.)
-// ============================================================================
-
-using System;
-
 namespace EduNex.Models
 {
 

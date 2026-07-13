@@ -1,8 +1,34 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EduNex.Models
 {
+
+    public class QuestionSheetSummary
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public int TotalQuestions { get; set; }
+    }
+
+    public class AttemptCounts
+    {
+        public int Attempts { get; set; }
+        public int SubmittedAttempts { get; set; }
+        public int InProgressAttempts { get; set; }
+    }
+
+    public class ExamFilters
+    {
+        public string? Search { get; set; }
+        public string? Plan { get; set; }
+        public string? Status { get; set; }
+        public Guid? EnrolledCourseId { get; set; }
+        public DateTimeOffset? ActiveAt { get; set; }
+        public Guid? ExcludeSubmittedByUserId { get; set; }
+    }
     public class Exam
     {
         public Guid Id { get; set; }
@@ -18,14 +44,10 @@ namespace EduNex.Models
         public decimal? NegativeMarkingValue { get; set; }
         public Guid QuestionSheetId { get; set; }
         public Guid? CourseId { get; set; }
-        // Stored as a JSON array string, e.g. ["free","half","paid"].
-        // Serialize/deserialize with System.Text.Json where you use this,
-        // e.g. JsonSerializer.Deserialize<string[]>(exam.AccessPlansJson)
-        public string AccessPlansJson { get; set; } = "[\"free\",\"half\",\"paid\"]";
+        public string AccessPlans { get; set; } = "[\"free\",\"half\",\"full\"]";
         public Guid? CreatedBy { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
-        public List<Batch> Batches { get; set; } = new List<Batch>();
     }
 
     public class ExamAttempt
@@ -35,7 +57,7 @@ namespace EduNex.Models
         public Guid ExamId { get; set; }
         public DateTimeOffset StartedAt { get; set; }
         public DateTimeOffset? SubmittedAt { get; set; }
-        public string Status { get; set; } = "in_progress";
+        public string Status { get; set; } = ExamAttemptStatus.InProgress;
         public decimal? TotalMarks { get; set; }
         public decimal? MarksObtained { get; set; }
         public int? CorrectAnswers { get; set; }
@@ -54,5 +76,48 @@ namespace EduNex.Models
         public bool? IsCorrect { get; set; }
         public bool IsFlagged { get; set; }
         public DateTimeOffset? AnsweredAt { get; set; }
+    }
+
+    public class QuestionSheet
+    {
+        public Guid Id { get; set; }
+        public string SheetName { get; set; } = string.Empty;
+        public Guid? CreatedBy { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
+
+    public class Question
+    {
+        public Guid Id { get; set; }
+        public Guid SheetId { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
+        public decimal Marks { get; set; }
+        public int SortOrder { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+    }
+
+    public class QuestionOption
+    {
+        public Guid Id { get; set; }
+        public Guid QuestionId { get; set; }
+        public string OptionText { get; set; } = string.Empty;
+        public bool IsCorrect { get; set; }
+        public int SortOrder { get; set; }
+    }
+
+    public static class ExamAttemptStatus
+    {
+        public const string InProgress = "in_progress";
+        public const string Submitted = "submitted";
+        public const string TimedOut = "timed_out";
+    }
+
+    // Query-only status derived from [start,end] vs now -- not a stored value.
+    public static class ExamLifecycleStatus
+    {
+        public const string Upcoming = "upcoming";
+        public const string Active = "active";
+        public const string Ended = "ended";
     }
 }

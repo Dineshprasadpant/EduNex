@@ -24,14 +24,6 @@ namespace EduNex.Models
         public MediaSummaryDto? Media { get; set; }
     }
 
-    public class MediaSummaryDto
-    {
-        public Guid Id { get; set; }
-        public string? Url { get; set; }
-        public string? Filename { get; set; }
-        public string? MimeType { get; set; }
-    }
-
     // Used internally by Dapper's multi-mapping for the media half of the
     // joined row - has no Id of its own; the DAL reuses advertisements.media_id
     // as the media's id, same trick the TS repository's shapeRow() uses.

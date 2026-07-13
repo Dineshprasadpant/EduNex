@@ -1,8 +1,12 @@
-﻿using EduNex.DataAccess;
+﻿using EduNex.Api.DataAccess;
+using EduNex.Api.Filters;
+using EduNex.Api.Service;
+using EduNex.DataAccess;
 using EduNex.Services;
 using Microsoft.OpenApi.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
 namespace EduNex.API
 {
     public static class DependencyInjection
@@ -13,16 +17,19 @@ namespace EduNex.API
         {
             var connectionString = configuration.GetConnectionString("DefaultConnection")
                 ?? throw new Exception("Connection string not found.");
-            // Controllers
+
+            Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+
             services.AddControllers()
-    .AddJsonOptions(o =>
-    {
-        o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-    });
+                .AddJsonOptions(o =>
+                {
+                    o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                    o.JsonSerializerOptions.Converters.Add(
+                        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+                });
+
             services.AddEndpointsApiExplorer();
 
-            // Swagger
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo
@@ -45,7 +52,6 @@ namespace EduNex.API
                     {
                         new OpenApiSecurityScheme
                         {
-                            UnresolvedReference = true,
                             Reference = new OpenApiReference
                             {
                                 Type = ReferenceType.SecurityScheme,
@@ -56,7 +62,9 @@ namespace EduNex.API
                     }
                 });
             });
+
             services.AddSingleton<AppState>();
+
             services.AddDistributedMemoryCache();
 
             services.AddStackExchangeRedisCache(options =>
@@ -64,52 +72,28 @@ namespace EduNex.API
                 options.Configuration = configuration.GetConnectionString("Redis");
             });
 
+            services.AddHttpClient();
+
             // Repositories
-            services.AddScoped<IAnnouncementDal>(_ =>
-                new AnnouncementDal(connectionString));
-            services.AddScoped<IAdvertisementDal>(_ =>
-                new AdvertisementDal(connectionString));
-            services.AddScoped<IAnnouncementDal>(_ =>
-                new AnnouncementDal(connectionString));
-            services.AddScoped<IAdvertisementDal>(_ =>
-                new AdvertisementDal(connectionString));
-            services.AddScoped<IAnalyticsDal>(_ =>
-                new AnalyticsDal(connectionString));
-            services.AddScoped<IBatchDal>(_ =>
-                new BatchDal(connectionString));
-            services.AddScoped<IClassMaterialDal>(_ =>
-                new ClassMaterialDal(connectionString));
-            services.AddScoped<ICourseDal>(_ =>
-                new CourseDal(connectionString));
-            services.AddScoped<IEventDal>(_ =>
-                new EventDal(connectionString));
-            services.AddScoped<IExamPerformanceDal>(_ =>
-                new ExamPerformanceDal(connectionString));
-            services.AddScoped<IExamDal>(_ =>
-                new ExamDal(connectionString));
-            services.AddScoped<IFeedbackDal>(_ =>
-                new FeedbackDal(connectionString));
-            services.AddScoped<INewsDal>(_ =>
-                new NewsDal(connectionString));
-            services.AddScoped<IQuestionSheetDal>(_ =>
-                new QuestionSheetDal(connectionString));
-            services.AddScoped<ISubscriberDal>(_ =>
-                new SubscriberDal(connectionString));
-            services.AddScoped<ICategoryDal>(_ =>
-                new CategoryDal(connectionString));
-            services.AddScoped<ICourseDal>(_ =>
-                new CourseDal(connectionString));
-            services.AddScoped<IEventDal>(_ =>
-                new EventDal(connectionString));
-            services.AddScoped<IQuestionSheetDal>(_ =>
-                new QuestionSheetDal(connectionString));
-            services.AddScoped<IUserDal>(_ =>
-                new UserDal(connectionString));
+            services.AddScoped<IAnnouncementDal, AnnouncementDal>();
+            services.AddScoped<IAdvertisementDal>(_ => new AdvertisementDal(connectionString));
+            services.AddScoped<IAnalyticsDal>(_ => new AnalyticsDal(connectionString));
+            services.AddScoped<IBatchDal>(_ => new BatchDal(connectionString));
+            services.AddScoped<IClassMaterialDal>(_ => new ClassMaterialDal(connectionString));
+            services.AddScoped<ICourseDal>(_ => new CourseDal(connectionString));
+            services.AddScoped<IEventDal, EventDal>();
+            services.AddScoped<IExamPerformanceDal>(_ => new ExamPerformanceDal(connectionString));
+            services.AddScoped<IExamDal>(_ => new ExamDal(connectionString));
+            services.AddScoped<IFeedbackDal>(_ => new FeedbackDal(connectionString));
+            services.AddScoped<INewsDal>(_ => new NewsDal(connectionString));
+            services.AddScoped<IQuestionSheetDal>(_ => new QuestionSheetDal(connectionString));
+            services.AddScoped<ISubscriberDal>(_ => new SubscriberDal(connectionString));
+            services.AddScoped<IDbConnectionFactory, DbConnectionFactory>();
+            services.AddScoped<IAuthDal, AuthDal>();
+            services.AddScoped<IUserDal>(_ => new UserDal(connectionString));
+            services.AddScoped<ISiteContentDal, SiteContentDal>();
+
             // Services
-            services.AddScoped<ICategoryService, CategoryService>();
-            services.AddScoped<ICourseService, CourseService>();
-            services.AddScoped<IEventService, EventService>();
-            services.AddScoped<IQuestionSheetService, QuestionSheetService>();
             services.AddScoped<IAnnouncementService, AnnouncementService>();
             services.AddScoped<IAdvertisementService, AdvertisementService>();
             services.AddScoped<IAnalyticsService, AnalyticsService>();
@@ -126,6 +110,11 @@ namespace EduNex.API
             services.AddScoped<IQuestionSheetService, QuestionSheetService>();
             services.AddScoped<ISubscriberService, SubscriberService>();
             services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IAuthService, AuthService>();
+            services.AddScoped<IJwtService, JwtService>();
+            services.AddScoped<ITokenService, TokenService>();
+            services.AddScoped<ISiteContentService, SiteContentService>();
+            services.AddScoped<BlockedUserCheckFilter>();
 
             // CORS
             var allowedOrigins = configuration

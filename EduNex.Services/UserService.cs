@@ -24,14 +24,12 @@ namespace EduNex.Services
     public class UserService : IUserService
     {
         private readonly IUserDal _repo;
-        private readonly IPasswordHasher _hasher;
         private readonly IMailService _mail;
         private readonly string _frontendUrl;
 
-        public UserService(IUserDal repo, IPasswordHasher hasher, IMailService mail, IConfiguration configuration)
+        public UserService(IUserDal repo,IMailService mail, IConfiguration configuration)
         {
             _repo = repo;
-            _hasher = hasher;
             _mail = mail;
             _frontendUrl = configuration["Frontend:Url"] ?? string.Empty;
         }
@@ -76,7 +74,7 @@ namespace EduNex.Services
                     throw new BadRequestException("Payment image is required for paid plans");
             }
 
-            var passwordHash = _hasher.Hash(input.Password);
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(input.Password);
 
             var user = await _repo.InsertUserAsync(new User
             {
@@ -281,7 +279,7 @@ namespace EduNex.Services
         {
             var user = await _repo.GetByIdAsync(id) ?? throw new NotFoundException("User not found");
 
-            var passwordHash = _hasher.Hash(newPassword);
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
             await _repo.UpdatePasswordHashAsync(id, passwordHash);
             await _repo.RevokeAllRefreshTokensAsync(id);
 
