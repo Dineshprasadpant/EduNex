@@ -1,65 +1,133 @@
+using EduNex.Common;
 using EduNex.Models;
-using EduNex.Models.Dtos;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StackExchange.Redis;
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace EduNex.API.Controllers
 {
     [ApiController]
-    [Route("api/class-materials")]
+    [Route("api/[controller]")]
     public class ClassMaterialsController : ControllerBase
     {
         private readonly IClassMaterialService _service;
 
-        public ClassMaterialsController(IClassMaterialService service) => _service = service;
-
+        public ClassMaterialsController(IClassMaterialService service)
+        {
+            _service = service;
+        }
         [HttpGet]
-        [Authorize(Roles = "admin,teacher")]
-        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int limit = 10)
-        {
-            var (data, meta) = await _service.ListAsync(page, limit);
-            return Ok(new ApiListResponse<ClassMaterialDto> { Data = data, Meta = (PaginationMeta?)meta });
-        }
-
-        [HttpGet("batch/{batchId:guid}")]
         [Authorize]
-        public async Task<IActionResult> GetByBatch(Guid batchId, [FromQuery] int page = 1, [FromQuery] int limit = 10)
+        public async Task<IActionResult> List([FromQuery] ListMaterialsQuery query)
         {
-            var (data, meta) = await _service.ListByBatchAsync(batchId, page, limit);
-            return Ok(new ApiListResponse<ClassMaterialDto> { Data = data, Meta = (PaginationMeta?)meta });
+            var (userId, role) = GetRequester();
+            var (data, total, page, limit) = await _service.ListAsync(userId, role, query);
+            var meta = PaginationMeta.Create(total, page, limit);
+            return Ok(new ApiListResponse<ClassMaterialResponseDto> { Data = data, Meta = meta });
         }
 
-        [HttpGet("{id:guid}")]
-        [Authorize(Roles = "admin,teacher")]
-        public async Task<IActionResult> Get(Guid id)
+        [HttpGet("{id}/view-url")]
+        [Authorize]
+        public async Task<IActionResult> ViewUrl(string id)
         {
-            var mat = await _service.GetByIdAsync(id);
-            return Ok(new ApiDataResponse<ClassMaterialDto> { Data = mat });
+            var (userId, role) = GetRequester();
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid guid format.");  
+            }
+            var result = await _service.ViewUrlAsync(userId, role, guid);
+            return Ok(new ApiDataResponse<ViewUrlResultDto> { Data = result });
+        }
+
+
+        [HttpGet("{id}/stream")]
+        [Authorize]
+        public async Task<IActionResult> Stream(string id)
+        {
+            var (userId, role) = GetRequester();
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid guid format.");
+            }
+            var result = await _service.StreamAsync(userId, role, guid);
+
+            Response.Headers["Content-Disposition"] = "inline";
+            Response.Headers["Cache-Control"] = "private, no-store, max-age=0";
+
+            return File(result.Body, result.MimeType, enableRangeProcessing: false);
+        }
+
+        [HttpGet("{id}/download")]
+        [Authorize(Roles = ("admin,teacher"))]
+        public async Task<IActionResult> Download(string id)
+        {
+            var (userId, role) = GetRequester();
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid guid format.");
+            }
+            var result = await _service.DownloadAsync(userId, role, guid);
+            return Ok(new ApiDataResponse<DownloadResultDto> { Data = result });
+        }
+
+        [HttpGet("{id}")]
+        [Authorize]
+        public async Task<IActionResult> GetById(string id)
+        {
+            var (userId, role) = GetRequester();
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid guid format.");
+            }
+            var material = await _service.GetByIdAsync(userId, role, guid);
+            return Ok(new ApiDataResponse<ClassMaterialResponseDto> { Data = material });
         }
 
         [HttpPost]
-        [Authorize(Roles = "admin,teacher")]
-        public async Task<IActionResult> Create([FromBody] CreateClassMaterialDto request)
+        [Authorize(Roles = ("admin,teacher"))]
+        public async Task<IActionResult> Create([FromBody] CreateClassMaterialRequest input)
         {
-            var mat = await _service.CreateAsync(request);
-            return StatusCode(201, new ApiDataResponse<ClassMaterialDto> { Data = mat });
+            var (userId, _) = GetRequester();
+            var created = await _service.CreateAsync(input, userId);
+            return StatusCode(201, new ApiDataResponse<ClassMaterialRawDto> { Data = created });
         }
 
-        [HttpPut("{id:guid}")]
-        [Authorize(Roles = "admin,teacher")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateClassMaterialDto request)
+        [HttpPut("{id}")]
+        [Authorize(Roles =("admin,teacher"))]
+        public async Task<IActionResult> Update(string id, [FromBody] UpdateClassMaterialRequest input)
         {
-            var mat = await _service.UpdateAsync(id, request);
-            return Ok(new ApiDataResponse<ClassMaterialDto> { Data = mat });
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid guid format.");
+            }
+            var updated = await _service.UpdateAsync(guid, input);
+            return Ok(new ApiDataResponse<ClassMaterialRawDto> { Data = updated });
         }
 
-        [HttpDelete("{id:guid}")]
-        [Authorize(Roles = "admin,teacher")]
-        public async Task<IActionResult> Delete(Guid id)
+        [HttpDelete("{id}")]
+        [Authorize(Roles =("admin,teacher"))]
+        public async Task<IActionResult> Remove(string id)
         {
-            await _service.DeleteAsync(id);
+            if (!Guid.TryParse(id, out var guid))
+            {
+                return BadRequest("Invalid guid format.");
+            }
+            await _service.DeleteAsync(guid);
             return NoContent();
+        }
+
+        private (Guid UserId, string Role) GetRequester()
+        {
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? throw new UnauthorizedException("Missing user identity claim");
+            var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value
+                ?? throw new UnauthorizedException("Missing role claim");
+
+            return (Guid.Parse(idClaim), roleClaim);
         }
     }
 }

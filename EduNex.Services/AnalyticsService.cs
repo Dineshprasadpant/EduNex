@@ -1,9 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using EduNex.DataAccess;
 using EduNex.Models;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace EduNex.Services
 {
@@ -14,6 +15,7 @@ namespace EduNex.Services
         Task<ActiveNowDto> GetActiveNowAsync();
         Task<List<AnalyticsDailyDto>> GetDailyStatsAsync(string? from, string? to);
         Task<DashboardSummaryDto> GetDashboardSummaryAsync();
+        Task<(List<LeaderboardEntryDto> Data, int Total, int Page, int Limit)> GetLeaderboardAsync(LeaderboardQuery query);
     }
 
     public class AnalyticsService : IAnalyticsService
@@ -123,5 +125,35 @@ namespace EduNex.Services
         }
 
         public Task<DashboardSummaryDto> GetDashboardSummaryAsync() => _repo.GetDashboardSummaryAsync();
+        public async Task<(List<LeaderboardEntryDto> Data, int Total, int Page, int Limit)> GetLeaderboardAsync(LeaderboardQuery query)
+        {
+            var page = Math.Max(1, query.Page ?? 1);
+           
+            var limit = Math.Min(100, Math.Max(1, query.Limit ?? 50));
+            var offset = (page - 1) * limit;
+
+            var from = ParseDateExact(query.From);
+            var to = ParseDateExact(query.To);
+
+            var (rows, total) = await _repo.GetLeaderboardAsync(query.ExamId, query.CourseId, from, to, limit, offset);
+
+            foreach (var entry in rows)
+                entry.Medal = GetMedal(entry.Rank);
+
+            return (rows, total, page, limit);
+        }
+
+        private static DateTime? ParseDateExact(string? raw) =>
+            string.IsNullOrEmpty(raw)
+                ? null
+                : DateTime.ParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        private static string? GetMedal(int rank) => rank switch
+        {
+            1 => "gold",
+            2 => "silver",
+            3 => "bronze",
+            _ => null
+        };
     }
 }

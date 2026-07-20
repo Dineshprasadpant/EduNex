@@ -79,7 +79,7 @@ namespace EduNex.Api.Service
                 Email = request.Email,
                 Phone = request.Phone,
                 PasswordHash = passwordHash,
-                Role = "Student",
+                Role = "user",
                 IsVerified = false,
                 IsBlocked = false,
             };

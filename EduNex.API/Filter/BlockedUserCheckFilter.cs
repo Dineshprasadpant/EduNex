@@ -1,6 +1,7 @@
 ﻿using EduNex.Api.DataAccess;
 using EduNex.Models;
 using Microsoft.AspNetCore.Mvc.Filters;
+using System.Security.Claims;
 
 namespace EduNex.Api.Filters
 {
@@ -15,7 +16,7 @@ namespace EduNex.Api.Filters
 
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
-            var userIdClaim = context.HttpContext.User.FindFirst("userId")?.Value;
+            var userIdClaim = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
             {
                 throw new UnauthorizedException("Invalid or expired token");

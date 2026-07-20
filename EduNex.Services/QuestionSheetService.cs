@@ -1,89 +1,202 @@
+using EduNex.DataAccess;
+using EduNex.Models;
+using EduNex.Models.Dtos;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using EduNex.DataAccess;
-using EduNex.Models.Dtos;
 
 namespace EduNex.Services
 {
-    public interface IQuestionSheetService
+    public interface IQuestionsService
     {
-        Task<(List<QuestionSheetDto> Data, object? Meta)> ListSheetsAsync(int page, int limit, string? search);
-        Task<QuestionSheetDto> GetSheetByIdAsync(Guid id);
-        Task<QuestionSheetDto> CreateSheetAsync(CreateSheetDto input, Guid? createdBy);
-        Task<QuestionSheetDto> UpdateSheetAsync(Guid id, UpdateSheetDto input);
-        Task DeleteSheetAsync(Guid id);
-        Task<QuestionDto> AddQuestionAsync(Guid sheetId, CreateQuestionDto input);
-        Task<QuestionDto> UpdateQuestionAsync(Guid sheetId, Guid qId, UpdateQuestionDto input);
-        Task DeleteQuestionAsync(Guid sheetId, Guid qId);
-        Task<List<QuestionDto>> ImportQuestionsAsync(Guid sheetId, ImportQuestionsDto input);
-        Task ReorderQuestionsAsync(Guid sheetId, ReorderQuestionsDto input);
+        Task<QuestionSheetDto> CreateSheetAsync(CreateSheetRequest input, Guid? userId);
+        Task<QuestionSheetDto?> UpdateSheetAsync(Guid id, UpdateSheetRequest input);
+        Task<(IEnumerable<QuestionSheetListItemDto> Data, PaginationMeta Meta)> ListSheetsAsync(int page, int limit, string? search);
+        Task<QuestionSheetDetailDto?> GetSheetByIdAsync(Guid id);
+        Task<bool> DeleteSheetAsync(Guid id);
+
+        Task<QuestionOpResult<QuestionDto>> AddQuestionAsync(Guid sheetId, CreateQuestionRequest input);
+        Task<QuestionOpResult<QuestionDto>> UpdateQuestionAsync(Guid sheetId, Guid questionId, UpdateQuestionRequest input);
+        Task<QuestionOpStatus> DeleteQuestionAsync(Guid sheetId, Guid questionId);
+        Task<QuestionOpResult<List<QuestionDto>>> ImportQuestionsAsync(Guid sheetId, ImportQuestionsRequest input);
+        Task<bool> ReorderQuestionsAsync(Guid sheetId, ReorderQuestionsRequest input);
     }
 
-    public class QuestionSheetService : IQuestionSheetService
+    public class QuestionsService : IQuestionsService
     {
-        private readonly IQuestionSheetDal _dal;
-        public QuestionSheetService(IQuestionSheetDal dal) => _dal = dal;
+        private readonly IQuestionsDal _dal;
+        public QuestionsService(IQuestionsDal dal) => _dal = dal;
 
-        public async Task<(List<QuestionSheetDto> Data, object? Meta)> ListSheetsAsync(int page, int limit, string? search)
+        public async Task<QuestionSheetDto> CreateSheetAsync(CreateSheetRequest input, Guid? userId)
         {
-            int p = Math.Max(1, page);
-            int l = Math.Min(100, Math.Max(1, limit));
-            int offset = (p - 1) * l;
-
-            var result = await _dal.ListSheetsAsync(l, offset, search);
-            var meta = new { Page = p, Limit = l, Total = result.Total, TotalPages = (int)Math.Ceiling((double)result.Total / l) };
-            return (result.Data, meta);
+            var row = await _dal.CreateSheetAsync(input.Title, userId);
+            return MapSheetDto(row);
         }
 
-        public async Task<QuestionSheetDto> GetSheetByIdAsync(Guid id)
+        public async Task<QuestionSheetDto?> UpdateSheetAsync(Guid id, UpdateSheetRequest input)
         {
-            var sheet = await _dal.GetSheetByIdAsync(id);
-            if (sheet == null) throw new Exception("Question sheet not found");
-            return sheet;
-        }
+            var existing = await _dal.FindSheetByIdAsync(id);
+            if (existing == null) return null;
 
-        public async Task<QuestionSheetDto> CreateSheetAsync(CreateSheetDto input, Guid? createdBy)
-        {
-            return await _dal.CreateSheetAsync(input.Title, createdBy);
-        }
-
-        public async Task<QuestionSheetDto> UpdateSheetAsync(Guid id, UpdateSheetDto input)
-        {
             var updated = await _dal.UpdateSheetAsync(id, input.Title);
-            if (updated == null) throw new Exception("Question sheet not found");
-            return updated;
+            return updated == null ? null : MapSheetDto(updated);
         }
 
-        public async Task DeleteSheetAsync(Guid id) => await _dal.DeleteSheetAsync(id);
-
-        public async Task<QuestionDto> AddQuestionAsync(Guid sheetId, CreateQuestionDto input)
+        public async Task<(IEnumerable<QuestionSheetListItemDto>, PaginationMeta)> ListSheetsAsync(
+            int page, int limit, string? search)
         {
-            var q = await _dal.AddQuestionAsync(sheetId, input.QuestionText, input.Marks, input.SortOrder);
-            q.Options = await _dal.AddOptionsAsync(q.Id, input.Options);
-            return q;
+            var offset = (page - 1) * limit;
+            var (rows, total) = await _dal.FindAllSheetsAsync(search, offset, limit);
+
+            var data = rows.Select(r => new QuestionSheetListItemDto
+            {
+                Id = r.Id,
+                Title = r.SheetName,
+                CreatedBy = r.CreatorFirstName != null
+                    ? new CreatedByDto { FirstName = r.CreatorFirstName, LastName = r.CreatorLastName ?? "" }
+                    : null,
+                CreatedAt = r.CreatedAt,
+                UpdatedAt = r.UpdatedAt,
+                TotalQuestions = r.TotalQuestions,
+                TotalMarks = r.TotalMarks
+            });
+
+            return (data, PaginationMeta.Create(total, page, limit));
         }
 
-        public async Task<QuestionDto> UpdateQuestionAsync(Guid sheetId, Guid qId, UpdateQuestionDto input)
+        public async Task<QuestionSheetDetailDto?> GetSheetByIdAsync(Guid id)
         {
-            var q = await _dal.UpdateQuestionAsync(qId, input.QuestionText, input.Marks, input.SortOrder);
-            if (q == null) throw new Exception("Question not found");
-            
-            if (input.Options != null) await _dal.ReplaceOptionsAsync(qId, input.Options);
-            
-            return (await _dal.GetQuestionByIdAsync(qId))!;
+            var sheet = await _dal.FindSheetByIdAsync(id);
+            if (sheet == null) return null;
+
+            var questions = (await _dal.FindQuestionsBySheetIdAsync(id)).ToList();
+            var options = (await _dal.FindOptionsByQuestionIdsAsync(questions.Select(q => q.Id))).ToList();
+
+            return new QuestionSheetDetailDto
+            {
+                Id = sheet.Id,
+                Title = sheet.SheetName,
+                CreatedBy = sheet.CreatedBy,
+                CreatedAt = sheet.CreatedAt,
+                UpdatedAt = sheet.UpdatedAt,
+                TotalQuestions = questions.Count,
+                TotalMarks = questions.Sum(q => q.Marks),
+                Questions = questions.Select(q => MapQuestion(q, options)).ToList()
+            };
         }
 
-        public async Task DeleteQuestionAsync(Guid sheetId, Guid qId) => await _dal.DeleteQuestionAsync(qId);
-
-        public async Task<List<QuestionDto>> ImportQuestionsAsync(Guid sheetId, ImportQuestionsDto input)
+        public async Task<bool> DeleteSheetAsync(Guid id)
         {
-            return await _dal.BulkAddQuestionsAsync(sheetId, input.Questions);
+            var existing = await _dal.FindSheetByIdAsync(id);
+            if (existing == null) return false;
+
+            await _dal.DeleteSheetAsync(id);
+            return true;
         }
 
-        public async Task ReorderQuestionsAsync(Guid sheetId, ReorderQuestionsDto input)
+        public async Task<QuestionOpResult<QuestionDto>> AddQuestionAsync(Guid sheetId, CreateQuestionRequest input)
         {
+            var sheet = await _dal.FindSheetByIdAsync(sheetId);
+            if (sheet == null) return new() { Status = QuestionOpStatus.SheetNotFound };
+
+            var row = await _dal.AddQuestionAsync(sheetId, input.QuestionText, input.Marks, input.SortOrder, input.Options);
+            var optionRows = await _dal.FindOptionsByQuestionIdAsync(row.Id);
+
+            return new() { Status = QuestionOpStatus.Ok, Value = MapQuestion(row, optionRows) };
+        }
+
+        public async Task<QuestionOpResult<QuestionDto>> UpdateQuestionAsync(
+            Guid sheetId, Guid questionId, UpdateQuestionRequest input)
+        {
+            var sheet = await _dal.FindSheetByIdAsync(sheetId);
+            if (sheet == null) return new() { Status = QuestionOpStatus.SheetNotFound };
+
+            var question = await _dal.FindQuestionByIdAsync(questionId);
+            if (question == null || question.SheetId != sheetId)
+                return new() { Status = QuestionOpStatus.QuestionNotFound };
+
+            await _dal.UpdateQuestionAsync(questionId, input.QuestionText, input.Marks, input.SortOrder);
+
+            if (input.Options != null)
+                await _dal.ReplaceOptionsAsync(questionId, input.Options);
+
+            var updated = await _dal.FindQuestionByIdAsync(questionId);
+            var optionRows = await _dal.FindOptionsByQuestionIdAsync(questionId);
+
+            return new() { Status = QuestionOpStatus.Ok, Value = MapQuestion(updated!, optionRows) };
+        }
+
+        public async Task<QuestionOpStatus> DeleteQuestionAsync(Guid sheetId, Guid questionId)
+        {
+            var sheet = await _dal.FindSheetByIdAsync(sheetId);
+            if (sheet == null) return QuestionOpStatus.SheetNotFound;
+
+            var question = await _dal.FindQuestionByIdAsync(questionId);
+            if (question == null || question.SheetId != sheetId)
+                return QuestionOpStatus.QuestionNotFound;
+
+            await _dal.DeleteQuestionAsync(questionId);
+            return QuestionOpStatus.Ok;
+        }
+
+        public async Task<QuestionOpResult<List<QuestionDto>>> ImportQuestionsAsync(
+            Guid sheetId, ImportQuestionsRequest input)
+        {
+            var sheet = await _dal.FindSheetByIdAsync(sheetId);
+            if (sheet == null) return new() { Status = QuestionOpStatus.SheetNotFound };
+
+            var ids = await _dal.BulkAddQuestionsAsync(sheetId, input.Questions);
+
+            var result = new List<QuestionDto>();
+            foreach (var id in ids)
+            {
+                var q = await _dal.FindQuestionByIdAsync(id);
+                var opts = await _dal.FindOptionsByQuestionIdAsync(id);
+                result.Add(MapQuestion(q!, opts));
+            }
+
+            return new() { Status = QuestionOpStatus.Ok, Value = result };
+        }
+
+        public async Task<bool> ReorderQuestionsAsync(Guid sheetId, ReorderQuestionsRequest input)
+        {
+            var sheet = await _dal.FindSheetByIdAsync(sheetId);
+            if (sheet == null) return false;
+
             await _dal.ReorderQuestionsAsync(input.Orders);
+            return true;
         }
+
+        // ---- mapping helpers ----
+
+        private static QuestionSheetDto MapSheetDto(QuestionSheetRow row) => new()
+        {
+            Id = row.Id,
+            Title = row.SheetName,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            UpdatedAt = row.UpdatedAt
+        };
+
+        private static QuestionOptionDto MapOption(QuestionOptionRow o) => new()
+        {
+            Id = o.Id,
+            QuestionId = o.QuestionId,
+            OptionText = o.OptionText,
+            IsCorrect = o.IsCorrect,
+            SortOrder = o.SortOrder
+        };
+
+        private static QuestionDto MapQuestion(QuestionRow q, IEnumerable<QuestionOptionRow> allOptions) => new()
+        {
+            Id = q.Id,
+            SheetId = q.SheetId,
+            QuestionText = q.QuestionText,
+            Marks = q.Marks,
+            SortOrder = q.SortOrder,
+            CreatedAt = q.CreatedAt,
+            Options = allOptions.Where(o => o.QuestionId == q.Id).Select(MapOption).ToList()
+        };
     }
 }

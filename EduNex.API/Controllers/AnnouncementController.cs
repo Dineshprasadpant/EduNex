@@ -46,7 +46,7 @@ namespace EduNex.API.Controllers
 
         // POST api/announcements
         [HttpPost]
-        [Authorize(Roles =" Admin")]
+        [Authorize(Roles =" admin")]
         public async Task<IActionResult> Create([FromBody] CreateAnnouncementRequest input)
         {
             var created = await _service.CreateAsync(input);
@@ -55,7 +55,7 @@ namespace EduNex.API.Controllers
 
         // PUT api/announcements/{id}
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateAnnouncementRequest input)
         {
             var updated = await _service.UpdateAsync(Guid.Parse(id), input);
@@ -64,7 +64,7 @@ namespace EduNex.API.Controllers
 
         // DELETE api/announcements/{id}
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Remove(string id)
         {
             await _service.DeleteAsync(Guid.Parse(id));

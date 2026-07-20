@@ -1,174 +1,343 @@
+using Dapper;
+using EduNex.Api.DataAccess;
+using EduNex.Models;
+using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
-using Dapper;
-using EduNex.Models.Dtos;
-using Microsoft.Data.SqlClient;
 
 namespace EduNex.DataAccess
 {
-    public interface IQuestionSheetDal
+    public interface IQuestionsDal
     {
-        Task<(List<QuestionSheetDto> Data, int Total)> ListSheetsAsync(int limit, int offset, string? search);
-        Task<QuestionSheetDto?> GetSheetByIdAsync(Guid id);
-        Task<QuestionSheetDto> CreateSheetAsync(string title, Guid? createdBy);
-        Task<QuestionSheetDto?> UpdateSheetAsync(Guid id, string title);
+        Task<(IEnumerable<QuestionSheetListRow> Data, int Total)> FindAllSheetsAsync(string? search, int offset, int limit);
+        Task<QuestionSheetRow?> FindSheetByIdAsync(Guid id);
+        Task<QuestionSheetRow> CreateSheetAsync(string sheetName, Guid? createdBy);
+        Task<QuestionSheetRow?> UpdateSheetAsync(Guid id, string sheetName);
         Task DeleteSheetAsync(Guid id);
-        Task<QuestionDto> AddQuestionAsync(Guid sheetId, string text, decimal marks, int sortOrder);
-        Task<List<QuestionOptionDto>> AddOptionsAsync(Guid questionId, List<QuestionOptionDto> options);
-        Task<QuestionDto?> GetQuestionByIdAsync(Guid id);
-        Task<QuestionDto?> UpdateQuestionAsync(Guid id, string? text, decimal? marks, int? sortOrder);
-        Task ReplaceOptionsAsync(Guid questionId, List<QuestionOptionDto> options);
+
+        Task<IEnumerable<QuestionRow>> FindQuestionsBySheetIdAsync(Guid sheetId);
+        Task<IEnumerable<QuestionOptionRow>> FindOptionsByQuestionIdsAsync(IEnumerable<Guid> questionIds);
+
+        Task<QuestionRow?> FindQuestionByIdAsync(Guid id);
+        Task<IEnumerable<QuestionOptionRow>> FindOptionsByQuestionIdAsync(Guid questionId);
+        Task<QuestionRow> AddQuestionAsync(Guid sheetId, string questionText, decimal marks, int sortOrder, List<QuestionOptionInput> options);
+        Task<QuestionRow?> UpdateQuestionAsync(Guid id, string? questionText, decimal? marks, int? sortOrder);
+        Task ReplaceOptionsAsync(Guid questionId, List<QuestionOptionInput> options);
         Task DeleteQuestionAsync(Guid id);
-        Task ReorderQuestionsAsync(List<QuestionOrderDto> orders);
-        Task<List<QuestionDto>> BulkAddQuestionsAsync(Guid sheetId, List<CreateQuestionDto> questions);
+        Task ReorderQuestionsAsync(List<ReorderItem> orders);
+        Task<List<Guid>> BulkAddQuestionsAsync(Guid sheetId, List<ImportQuestionInput> questions);
     }
 
-    public class QuestionSheetDal : IQuestionSheetDal
+    public class QuestionsDal(IDbConnectionFactory _dbconn) : IQuestionsDal
     {
-        private readonly string _connectionString;
-        public QuestionSheetDal(string connectionString) => _connectionString = connectionString;
-        private IDbConnection Connection => new SqlConnection(_connectionString);
-
-        public async Task<(List<QuestionSheetDto> Data, int Total)> ListSheetsAsync(int limit, int offset, string? search)
+        public async Task<(IEnumerable<QuestionSheetListRow> Data, int Total)> FindAllSheetsAsync(
+            string? search, int offset, int limit)
         {
-            using var db = Connection;
-            var where = !string.IsNullOrEmpty(search) ? "WHERE sheet_name LIKE @Search" : "";
-            var sql = $@"
-                SELECT COUNT(*) FROM dbo.question_sheets {where};
-                SELECT qs.id, qs.sheet_name AS Title, qs.created_by, u.first_name, u.last_name, qs.created_at, qs.updated_at 
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                SELECT
+                    qs.id AS Id,
+                    qs.sheet_name AS SheetName,
+                    qs.created_by AS CreatedBy,
+                    qs.created_at AS CreatedAt,
+                    qs.updated_at AS UpdatedAt,
+                    u.first_name AS CreatorFirstName,
+                    u.last_name AS CreatorLastName,
+                    COUNT(q.id) AS TotalQuestions,
+                    COALESCE(SUM(q.marks), 0) AS TotalMarks
                 FROM dbo.question_sheets qs
-                LEFT JOIN dbo.users u ON qs.created_by = u.id
-                {where} ORDER BY qs.created_at DESC OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
-            
-            using var multi = await db.QueryMultipleAsync(sql, new { Search = $"%{search}%", Offset = offset, Limit = limit });
+                LEFT JOIN dbo.questions q ON q.sheet_id = qs.id
+                LEFT JOIN dbo.users u ON u.id = qs.created_by
+                WHERE (@Search IS NULL OR qs.sheet_name LIKE '%' + @Search + '%')
+                GROUP BY qs.id, qs.sheet_name, qs.created_by, qs.created_at, qs.updated_at,
+                         u.first_name, u.last_name
+                ORDER BY qs.created_at DESC
+                OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;
+
+                SELECT COUNT(*)
+                FROM dbo.question_sheets qs
+                WHERE (@Search IS NULL OR qs.sheet_name LIKE '%' + @Search + '%');";
+
+            using var multi = await conn.QueryMultipleAsync(sql,
+                new { Search = string.IsNullOrWhiteSpace(search) ? null : search, Offset = offset, Limit = limit });
+
+            var data = await multi.ReadAsync<QuestionSheetListRow>();
             var total = await multi.ReadFirstAsync<int>();
-            var rows = (await multi.ReadAsync<dynamic>()).ToList();
-            
-            var data = rows.Select(r => new QuestionSheetDto {
-                Id = r.id, Title = r.Title, CreatedAt = r.created_at, UpdatedAt = r.updated_at,
-                CreatedBy = r.first_name != null ? new { FirstName = (string)r.first_name, LastName = (string)r.last_name } : null
-            }).ToList();
             return (data, total);
         }
 
-        public async Task<QuestionSheetDto?> GetSheetByIdAsync(Guid id)
+        public async Task<QuestionSheetRow?> FindSheetByIdAsync(Guid id)
         {
-            using var db = Connection;
+            using var conn =  _dbconn.CreateConnection();
             const string sql = @"
-                SELECT * FROM dbo.question_sheets WHERE id = @Id;
-                SELECT * FROM dbo.questions WHERE sheet_id = @Id ORDER BY sort_order;
-                SELECT * FROM dbo.question_options WHERE question_id IN (SELECT id FROM dbo.questions WHERE sheet_id = @Id) ORDER BY sort_order;";
-
-            using var multi = await db.QueryMultipleAsync(sql, new { Id = id });
-            var sheet = await multi.ReadFirstOrDefaultAsync<QuestionSheetDto>();
-            if (sheet == null) return null;
-
-            var questions = (await multi.ReadAsync<QuestionDto>()).ToList();
-            var options = (await multi.ReadAsync<QuestionOptionDto>()).ToList();
-
-            foreach (var q in questions) {
-                q.Options = options.Where(o => o.QuestionId == q.Id).ToList();
-            }
-            sheet.Questions = questions;
-            sheet.TotalQuestions = questions.Count;
-            sheet.TotalMarks = questions.Sum(q => q.Marks);
-            return sheet;
+                SELECT id AS Id, sheet_name AS SheetName, created_by AS CreatedBy,
+                       created_at AS CreatedAt, updated_at AS UpdatedAt
+                FROM dbo.question_sheets WHERE id = @Id;";
+            return await conn.QueryFirstOrDefaultAsync<QuestionSheetRow>(sql, new { Id = id });
         }
 
-        public async Task<QuestionSheetDto> CreateSheetAsync(string title, Guid? createdBy)
+        public async Task<QuestionSheetRow> CreateSheetAsync(string sheetName, Guid? createdBy)
         {
-            using var db = Connection;
-            var id = Guid.NewGuid();
-            await db.ExecuteAsync("INSERT INTO dbo.question_sheets (id, sheet_name, created_by, created_at, updated_at) VALUES (@Id, @Title, @By, @Now, @Now)", 
-                new { Id = id, Title = title, By = createdBy, Now = DateTimeOffset.UtcNow });
-            return await GetSheetByIdAsync(id) ?? throw new Exception("Sheet creation failed");
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                INSERT INTO dbo.question_sheets (sheet_name, created_by)
+                OUTPUT INSERTED.id AS Id, INSERTED.sheet_name AS SheetName,
+                       INSERTED.created_by AS CreatedBy, INSERTED.created_at AS CreatedAt,
+                       INSERTED.updated_at AS UpdatedAt
+                VALUES (@SheetName, @CreatedBy);";
+            return await conn.QuerySingleAsync<QuestionSheetRow>(
+                sql, new { SheetName = sheetName, CreatedBy = createdBy });
         }
 
-        public async Task<QuestionSheetDto?> UpdateSheetAsync(Guid id, string title)
+        public async Task<QuestionSheetRow?> UpdateSheetAsync(Guid id, string sheetName)
         {
-            using var db = Connection;
-            await db.ExecuteAsync("UPDATE dbo.question_sheets SET sheet_name = @Title, updated_at = @Now WHERE id = @Id", 
-                new { Id = id, Title = title, Now = DateTimeOffset.UtcNow });
-            return await GetSheetByIdAsync(id);
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                UPDATE dbo.question_sheets
+                SET sheet_name = @SheetName, updated_at = SYSDATETIMEOFFSET()
+                OUTPUT INSERTED.id AS Id, INSERTED.sheet_name AS SheetName,
+                       INSERTED.created_by AS CreatedBy, INSERTED.created_at AS CreatedAt,
+                       INSERTED.updated_at AS UpdatedAt
+                WHERE id = @Id;";
+            return await conn.QueryFirstOrDefaultAsync<QuestionSheetRow>(
+                sql, new { Id = id, SheetName = sheetName });
         }
 
         public async Task DeleteSheetAsync(Guid id)
         {
-            using var db = Connection;
-            await db.ExecuteAsync("DELETE FROM dbo.question_sheets WHERE id = @Id", new { Id = id });
+            using var conn =  _dbconn.CreateConnection();
+            // FK ON DELETE CASCADE on dbo.questions/dbo.question_options
+            // handles cleanup of children.
+            await conn.ExecuteAsync("DELETE FROM dbo.question_sheets WHERE id = @Id", new { Id = id });
         }
 
-        public async Task<QuestionDto> AddQuestionAsync(Guid sheetId, string text, decimal marks, int sortOrder)
+        public async Task<IEnumerable<QuestionRow>> FindQuestionsBySheetIdAsync(Guid sheetId)
         {
-            using var db = Connection;
-            var id = Guid.NewGuid();
-            await db.ExecuteAsync("INSERT INTO dbo.questions (id, sheet_id, question_text, marks, sort_order, created_at) VALUES (@Id, @SheetId, @Text, @Marks, @SortOrder, @Now)",
-                new { Id = id, SheetId = sheetId, Text = text, Marks = marks, SortOrder = sortOrder, Now = DateTimeOffset.UtcNow });
-            return (await GetQuestionByIdAsync(id))!;
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                SELECT id AS Id, sheet_id AS SheetId, question_text AS QuestionText,
+                       marks AS Marks, sort_order AS SortOrder, created_at AS CreatedAt
+                FROM dbo.questions WHERE sheet_id = @SheetId ORDER BY sort_order ASC;";
+            return await conn.QueryAsync<QuestionRow>(sql, new { SheetId = sheetId });
         }
 
-        public async Task<List<QuestionOptionDto>> AddOptionsAsync(Guid questionId, List<QuestionOptionDto> options)
+        public async Task<IEnumerable<QuestionOptionRow>> FindOptionsByQuestionIdsAsync(IEnumerable<Guid> questionIds)
         {
-            using var db = Connection;
-            foreach (var opt in options) {
-                opt.Id = Guid.NewGuid();
-                opt.QuestionId = questionId;
-                await db.ExecuteAsync("INSERT INTO dbo.question_options (id, question_id, option_text, is_correct, sort_order) VALUES (@Id, @QuestionId, @OptionText, @IsCorrect, @SortOrder)", opt);
+            var ids = questionIds.ToList();
+            if (ids.Count == 0) return Enumerable.Empty<QuestionOptionRow>();
+
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                SELECT id AS Id, question_id AS QuestionId, option_text AS OptionText,
+                       is_correct AS IsCorrect, sort_order AS SortOrder
+                FROM dbo.question_options
+                WHERE question_id IN @Ids
+                ORDER BY sort_order ASC;";
+            return await conn.QueryAsync<QuestionOptionRow>(sql, new { Ids = ids });
+        }
+
+        public async Task<QuestionRow?> FindQuestionByIdAsync(Guid id)
+        {
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                SELECT id AS Id, sheet_id AS SheetId, question_text AS QuestionText,
+                       marks AS Marks, sort_order AS SortOrder, created_at AS CreatedAt
+                FROM dbo.questions WHERE id = @Id;";
+            return await conn.QueryFirstOrDefaultAsync<QuestionRow>(sql, new { Id = id });
+        }
+
+        public async Task<IEnumerable<QuestionOptionRow>> FindOptionsByQuestionIdAsync(Guid questionId)
+        {
+            using var conn =  _dbconn.CreateConnection();
+            const string sql = @"
+                SELECT id AS Id, question_id AS QuestionId, option_text AS OptionText,
+                       is_correct AS IsCorrect, sort_order AS SortOrder
+                FROM dbo.question_options
+                WHERE question_id = @QuestionId ORDER BY sort_order ASC;";
+            return await conn.QueryAsync<QuestionOptionRow>(sql, new { QuestionId = questionId });
+        }
+
+        public async Task<QuestionRow> AddQuestionAsync(
+            Guid sheetId, string questionText, decimal marks, int sortOrder, List<QuestionOptionInput> options)
+        {
+            using var conn =  _dbconn.CreateConnection();
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                const string insertQ = @"
+                    INSERT INTO dbo.questions (sheet_id, question_text, marks, sort_order)
+                    OUTPUT INSERTED.id AS Id, INSERTED.sheet_id AS SheetId,
+                           INSERTED.question_text AS QuestionText, INSERTED.marks AS Marks,
+                           INSERTED.sort_order AS SortOrder, INSERTED.created_at AS CreatedAt
+                    VALUES (@SheetId, @QuestionText, @Marks, @SortOrder);";
+
+                var question = await conn.QuerySingleAsync<QuestionRow>(insertQ, new
+                {
+                    SheetId = sheetId,
+                    QuestionText = questionText,
+                    Marks = marks,
+                    SortOrder = sortOrder
+                }, tx);
+
+                const string insertOpt = @"
+                    INSERT INTO dbo.question_options (question_id, option_text, is_correct, sort_order)
+                    VALUES (@QuestionId, @OptionText, @IsCorrect, @SortOrder);";
+
+                foreach (var opt in options)
+                {
+                    await conn.ExecuteAsync(insertOpt, new
+                    {
+                        QuestionId = question.Id,
+                        opt.OptionText,
+                        opt.IsCorrect,
+                        opt.SortOrder
+                    }, tx);
+                }
+
+                tx.Commit();
+                return question;
             }
-            return options;
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
         }
 
-        public async Task<QuestionDto?> GetQuestionByIdAsync(Guid id)
+        public async Task<QuestionRow?> UpdateQuestionAsync(
+            Guid id, string? questionText, decimal? marks, int? sortOrder)
         {
-            using var db = Connection;
-            var q = await db.QuerySingleOrDefaultAsync<QuestionDto>("SELECT * FROM dbo.questions WHERE id = @Id", new { Id = id });
-            if (q != null) q.Options = (await db.QueryAsync<QuestionOptionDto>("SELECT * FROM dbo.question_options WHERE question_id = @Id ORDER BY sort_order", new { Id = id })).ToList();
-            return q;
+            var sets = new List<string>();
+            var parameters = new DynamicParameters();
+            parameters.Add("Id", id);
+
+            if (questionText != null) { sets.Add("question_text = @QuestionText"); parameters.Add("QuestionText", questionText); }
+            if (marks != null) { sets.Add("marks = @Marks"); parameters.Add("Marks", marks); }
+            if (sortOrder != null) { sets.Add("sort_order = @SortOrder"); parameters.Add("SortOrder", sortOrder); }
+
+            if (sets.Count == 0)
+                return await FindQuestionByIdAsync(id);
+
+            using var conn =  _dbconn.CreateConnection();
+            var sql = $@"
+                UPDATE dbo.questions SET {string.Join(", ", sets)}
+                OUTPUT INSERTED.id AS Id, INSERTED.sheet_id AS SheetId,
+                       INSERTED.question_text AS QuestionText, INSERTED.marks AS Marks,
+                       INSERTED.sort_order AS SortOrder, INSERTED.created_at AS CreatedAt
+                WHERE id = @Id;";
+            return await conn.QueryFirstOrDefaultAsync<QuestionRow>(sql, parameters);
         }
 
-        public async Task<QuestionDto?> UpdateQuestionAsync(Guid id, string? text, decimal? marks, int? sortOrder)
+        public async Task ReplaceOptionsAsync(Guid questionId, List<QuestionOptionInput> options)
         {
-            using var db = Connection;
-            await db.ExecuteAsync("UPDATE dbo.questions SET question_text = ISNULL(@Text, question_text), marks = ISNULL(@Marks, marks), sort_order = ISNULL(@SortOrder, sort_order) WHERE id = @Id",
-                new { Id = id, Text = text, Marks = marks, SortOrder = sortOrder });
-            return await GetQuestionByIdAsync(id);
-        }
+            using var conn =  _dbconn.CreateConnection();
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                await conn.ExecuteAsync(
+                    "DELETE FROM dbo.question_options WHERE question_id = @QuestionId",
+                    new { QuestionId = questionId }, tx);
 
-        public async Task ReplaceOptionsAsync(Guid questionId, List<QuestionOptionDto> options)
-        {
-            using var db = Connection;
-            db.Open();
-            using var trans = db.BeginTransaction();
-            await db.ExecuteAsync("DELETE FROM dbo.question_options WHERE question_id = @QId", new { QId = questionId }, trans);
-            await AddOptionsAsync(questionId, options);
-            trans.Commit();
+                const string insertOpt = @"
+                    INSERT INTO dbo.question_options (question_id, option_text, is_correct, sort_order)
+                    VALUES (@QuestionId, @OptionText, @IsCorrect, @SortOrder);";
+
+                foreach (var opt in options)
+                {
+                    await conn.ExecuteAsync(insertOpt, new
+                    {
+                        QuestionId = questionId,
+                        opt.OptionText,
+                        opt.IsCorrect,
+                        opt.SortOrder
+                    }, tx);
+                }
+
+                tx.Commit();
+            }
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
         }
 
         public async Task DeleteQuestionAsync(Guid id)
         {
-            using var db = Connection;
-            await db.ExecuteAsync("DELETE FROM dbo.questions WHERE id = @Id", new { Id = id });
+            using var conn =  _dbconn.CreateConnection();
+            await conn.ExecuteAsync("DELETE FROM dbo.questions WHERE id = @Id", new { Id = id });
         }
 
-        public async Task ReorderQuestionsAsync(List<QuestionOrderDto> orders)
+        public async Task ReorderQuestionsAsync(List<ReorderItem> orders)
         {
-            using var db = Connection;
-            await db.ExecuteAsync("UPDATE dbo.questions SET sort_order = @SortOrder WHERE id = @Id", orders);
-        }
+            using var conn =  _dbconn.CreateConnection();
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                const string sql = "UPDATE dbo.questions SET sort_order = @SortOrder WHERE id = @Id;";
+                foreach (var order in orders)
+                    await conn.ExecuteAsync(sql, new { order.Id, order.SortOrder }, tx);
 
-        public async Task<List<QuestionDto>> BulkAddQuestionsAsync(Guid sheetId, List<CreateQuestionDto> questions)
-        {
-            using var db = Connection;
-            var result = new List<QuestionDto>();
-            foreach(var q in questions) {
-                var newQ = await AddQuestionAsync(sheetId, q.QuestionText, q.Marks, q.SortOrder);
-                newQ.Options = await AddOptionsAsync(newQ.Id, q.Options);
-                result.Add(newQ);
+                tx.Commit();
             }
-            return result;
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
+        }
+
+        public async Task<List<Guid>> BulkAddQuestionsAsync(Guid sheetId, List<ImportQuestionInput> questions)
+        {
+            using var conn =  _dbconn.CreateConnection();
+            using var tx = conn.BeginTransaction();
+            var ids = new List<Guid>();
+            try
+            {
+                const string insertQ = @"
+                    INSERT INTO dbo.questions (sheet_id, question_text, marks, sort_order)
+                    OUTPUT INSERTED.id
+                    VALUES (@SheetId, @QuestionText, @Marks, 0);";
+
+                const string insertOpt = @"
+                    INSERT INTO dbo.question_options (question_id, option_text, is_correct, sort_order)
+                    VALUES (@QuestionId, @OptionText, @IsCorrect, @SortOrder);";
+
+                foreach (var q in questions)
+                {
+                    var newId = await conn.QuerySingleAsync<Guid>(insertQ, new
+                    {
+                        SheetId = sheetId,
+                        QuestionText = q.QuestionText,
+                        Marks = q.Marks
+                    }, tx);
+
+                    var idx = 0;
+                    foreach (var opt in q.Options)
+                    {
+                        await conn.ExecuteAsync(insertOpt, new
+                        {
+                            QuestionId = newId,
+                            opt.OptionText,
+                            opt.IsCorrect,
+                            SortOrder = idx++
+                        }, tx);
+                    }
+
+                    ids.Add(newId);
+                }
+
+                tx.Commit();
+                return ids;
+            }
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
         }
     }
 }

@@ -32,7 +32,7 @@ namespace EduNex.DataAccess
             const string sql = @"
                 SELECT COUNT(*) FROM Subscribers;
                 SELECT * FROM Subscribers 
-                ORDER BY CreatedAt DESC 
+                ORDER BY Created_At DESC 
                 OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
 
             using var multi = await conn.QueryMultipleAsync(sql,

@@ -1,45 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using EduNex.DataAccess;
 using EduNex.Models;
-using EduNex.Models.Dtos;
 
 namespace EduNex.Services
 {
-    public static class SlugHelper
-    {
-        public static string Slugify(string text)
-        {
-            var str = text.ToLower().Trim();
-            var regex1 = new Regex(@"[^\w\s-]");
-            str = regex1.Replace(str, "");
-            var regex2 = new Regex(@"[\s_-]+");
-            str = regex2.Replace(str, "-");
-            var regex3 = new Regex(@"^-+|-+$");
-            str = regex3.Replace(str, "");
-            return str;
-        }
-
-        public static string GenerateUniqueSlug(string baseSlug, List<string> existingSlugs)
-        {
-            var slug = Slugify(baseSlug);
-            if (!existingSlugs.Contains(slug)) return slug;
-            int counter = 1;
-            while (existingSlugs.Contains($"{slug}-{counter}")) counter++;
-            return $"{slug}-{counter}";
-        }
-    }
-
     public interface ICategoryService
     {
-        Task<(List<Category> Data, object? Meta)> ListAsync(int? page, int? limit);
+        Task<(List<Category> Data, PaginationMeta? Meta)> ListAsync(int? page, int? limit);
         Task<Category> GetByIdAsync(Guid id);
-        Task<Category> CreateAsync(CreateCategoryDto input);
-        Task<Category> UpdateAsync(Guid id, UpdateCategoryDto input);
-        Task DeleteAsync(Guid id);
+        Task<Category> CreateAsync(CreateCategoryRequestDto input);
+        Task<Category> UpdateAsync(Guid id, UpdateCategoryRequestDto input);
+        Task RemoveAsync(Guid id);
     }
 
     public class CategoryService : ICategoryService
@@ -51,91 +26,77 @@ namespace EduNex.Services
             _categoryDal = categoryDal;
         }
 
-        public async Task<(List<Category> Data, object? Meta)> ListAsync(int? page, int? limit)
+        private static readonly Regex NonAlphaNumeric = new(@"[^a-z0-9]+", RegexOptions.Compiled);
+
+        private static string Slugify(string name)
+        {
+            var slug = NonAlphaNumeric.Replace(name.ToLowerInvariant(), "-").Trim('-');
+            return slug.Length > 0 ? slug : "category";
+        }
+
+        private static string GenerateUniqueSlug(string name, IEnumerable<string> existingSlugs)
+        {
+            var existing = new HashSet<string>(existingSlugs, StringComparer.OrdinalIgnoreCase);
+            var baseSlug = Slugify(name);
+            var slug = baseSlug;
+            var counter = 1;
+            while (existing.Contains(slug))
+            {
+                slug = $"{baseSlug}-{counter}";
+                counter++;
+            }
+            return slug;
+        }
+
+        public async Task<(List<Category> Data, PaginationMeta? Meta)> ListAsync(int? page, int? limit)
         {
             if (!limit.HasValue)
             {
-                var data = await _categoryDal.ListAsync(int.MaxValue, 0);
-                return (data.Data, null);
+                var all = await _categoryDal.FindAllAsync();
+                return (all, null);
             }
 
-            int p = Math.Max(1, page ?? 1);
-            int l = Math.Min(100, Math.Max(1, limit.Value));
-            int offset = (p - 1) * l;
-
-            var result = await _categoryDal.ListAsync(l, offset);
-            
-            var meta = new
-            {
-                Page = p,
-                Limit = l,
-                Total = result.Total,
-                TotalPages = (int)Math.Ceiling((double)result.Total / l)
-            };
-
-            return (result.Data, meta);
+            var pagination = Paginator.Paginate(page?.ToString(), limit.Value.ToString());
+            var data = await _categoryDal.FindAllAsync(new DalPagination { Offset = pagination.Offset, Limit = pagination.Limit });
+            var total = await _categoryDal.CountAllAsync();
+            return (data, PaginationMeta.Create(total, pagination.Page, pagination.Limit));
         }
 
         public async Task<Category> GetByIdAsync(Guid id)
         {
-            var category = await _categoryDal.GetByIdAsync(id);
-            if (category == null) throw new Exception("Category not found"); // Replace with custom exception
+            var category = await _categoryDal.FindByIdAsync(id);
+            if (category is null) throw new NotFoundException("Category not found");
             return category;
         }
 
-        public async Task<Category> CreateAsync(CreateCategoryDto input)
+        public async Task<Category> CreateAsync(CreateCategoryRequestDto input)
         {
-            var existingSlugs = await _categoryDal.GetAllSlugsAsync();
-            var slug = SlugHelper.GenerateUniqueSlug(input.Name, existingSlugs);
-            
-            try
-            {
-                return await _categoryDal.InsertCategoryAsync(new Category
-                {
-                    Name = input.Name,
-                    Slug = slug,
-                    Description = input.Description
-                });
-            }
-            catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-            {
-                throw new Exception("A category with this name already exists");
-            }
+            var existingSlugs = await _categoryDal.FindSlugsAsync();
+            var slug = GenerateUniqueSlug(input.Name, existingSlugs);
+            return await _categoryDal.CreateAsync(input.Name, slug, input.Description);
         }
 
-        public async Task<Category> UpdateAsync(Guid id, UpdateCategoryDto input)
+        public async Task<Category> UpdateAsync(Guid id, UpdateCategoryRequestDto input)
         {
-            var existing = await _categoryDal.GetByIdAsync(id);
-            if (existing == null) throw new Exception("Category not found");
+            var existing = await _categoryDal.FindByIdAsync(id);
+            if (existing is null) throw new NotFoundException("Category not found");
 
             string? slug = null;
-            if (input.Name != null && input.Name != existing.Name)
+            if (!string.IsNullOrEmpty(input.Name) && input.Name != existing.Name)
             {
-                var existingSlugs = (await _categoryDal.GetAllSlugsAsync()).Where(s => s != existing.Slug).ToList();
-                slug = SlugHelper.GenerateUniqueSlug(input.Name, existingSlugs);
+                var existingSlugs = (await _categoryDal.FindSlugsAsync()).Where(s => s != existing.Slug);
+                slug = GenerateUniqueSlug(input.Name, existingSlugs);
             }
 
-            try
-            {
-                existing.Name = input.Name ?? existing.Name;
-                existing.Description = input.Description ?? existing.Description;
-                if (slug != null) existing.Slug = slug;
-
-                var updated = await _categoryDal.UpdateCategoryAsync(existing);
-                if (updated == null) throw new Exception("Failed to update category");
-                return updated;
-            }
-            catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-            {
-                throw new Exception("A category with this name already exists");
-            }
+            return await _categoryDal.UpdateAsync(id, input.Name, input.Description, slug)
+                ?? throw new NotFoundException("Category not found");
         }
 
-        public async Task DeleteAsync(Guid id)
+        public async Task RemoveAsync(Guid id)
         {
-            var existing = await _categoryDal.GetByIdAsync(id);
-            if (existing == null) throw new Exception("Category not found");
-            await _categoryDal.DeleteCategoryAsync(id);
+            var existing = await _categoryDal.FindByIdAsync(id);
+            if (existing is null) throw new NotFoundException("Category not found");
+            await _categoryDal.RemoveAsync(id);
         }
     }
 }

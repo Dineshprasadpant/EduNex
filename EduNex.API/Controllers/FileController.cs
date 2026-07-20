@@ -1,5 +1,7 @@
 using EduNex.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 namespace EduNex.API.Controllers
 {
     [ApiController]
@@ -11,11 +13,15 @@ namespace EduNex.API.Controllers
 
         // POST /api/files/upload?folder=uploads/citizenship
         [HttpPost("upload")]
+        [Authorize]
         public async Task<IActionResult> Upload(IFormFile file, [FromQuery] string folder = "uploads/general")
         {
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (claim is null || !Guid.TryParse(claim, out Guid userId))
+                throw new UnauthorizedAccessException("Invalid or expired token");
             try
             {
-                var res = await _fileService.UploadFileAsync(file, folder);
+                var res = await _fileService.UploadFileAsync(file, folder, uploadedBy :userId);
                 return Ok(new
                 {
                     success = true,

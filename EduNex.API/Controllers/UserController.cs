@@ -21,7 +21,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> List([FromQuery] ListUsersQuery query)
         {
             var (data, total, page, limit) = await _service.ListAsync(query);
@@ -38,7 +38,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> GetById(string id)
         {
             var user = await _service.GetByIdAsync(Guid.Parse(id));
@@ -46,7 +46,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Create([FromBody] CreateUserRequest input)
         {
             var created = await _service.CreateAsync(input);
@@ -55,7 +55,7 @@ namespace EduNex.API.Controllers
 
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateUserRequest input)
         {
             var updated = await _service.UpdateAsync(Guid.Parse(id), input);
@@ -63,7 +63,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{id}/verify")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Verify(string id)
         {
             var user = await _service.VerifyAsync(Guid.Parse(id));
@@ -71,7 +71,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{id}/block")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Block(string id, [FromBody] BlockUserRequest input)
         {
             var user = await _service.BlockAsync(Guid.Parse(id), input.Blocked);
@@ -79,7 +79,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{id}/unlock")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Unlock(string id)
         {
             var user = await _service.UnlockAsync(Guid.Parse(id));
@@ -87,7 +87,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPost("{id}/reset-password")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> ResetPassword(string id, [FromBody] ResetPasswordRequest input)
         {
             var result = await _service.ResetPasswordAsync(Guid.Parse(id), input.NewPassword);

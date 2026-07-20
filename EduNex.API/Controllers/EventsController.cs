@@ -4,6 +4,7 @@ using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace EduNex.API.Controllers
@@ -21,11 +22,11 @@ namespace EduNex.API.Controllers
 
         private Guid? GetOptionalUserId()
         {
-            var claim = User.FindFirst("userId")?.Value;
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             return Guid.TryParse(claim, out var id) ? id : null;
         }
 
-        private string? GetOptionalRole() => User.FindFirst("role")?.Value;
+        private string? GetOptionalRole() => User.FindFirst(ClaimTypes.Role)?.Value;
 
         [HttpGet]
         [ProducesResponseType(typeof(ApiListResponse<EventDto>), 200)]
@@ -44,7 +45,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles="Admin")]
+        [Authorize(Roles="admin")]
         [ServiceFilter(typeof(BlockedUserCheckFilter))]
         [ProducesResponseType(typeof(ApiDataResponse<Event>), 201)]
         public async Task<IActionResult> Create([FromBody] CreateEventRequestDto request)
@@ -54,7 +55,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{id:guid}")]
-        [Authorize(Roles="Admin")]
+        [Authorize(Roles="admin")]
         [ServiceFilter(typeof(BlockedUserCheckFilter))]
         [ProducesResponseType(typeof(ApiDataResponse<Event>), 200)]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateEventRequestDto request)
@@ -64,7 +65,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpDelete("{id:guid}")]
-        [Authorize(Roles="Admin")]
+        [Authorize(Roles="admin")]
         [ServiceFilter(typeof(BlockedUserCheckFilter))]
         [ProducesResponseType(204)]
         public async Task<IActionResult> Remove(Guid id)

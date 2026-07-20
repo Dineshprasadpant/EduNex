@@ -3,6 +3,7 @@ using EduNex.Api.Service;
 using EduNex.Models; 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace EduNex.Api.Controllers
 {
@@ -73,7 +74,7 @@ namespace EduNex.Api.Controllers
         [ProducesResponseType(typeof(ApiDataResponse<UserDto>), 200)]
         public async Task<IActionResult> GetMe()
         {
-            var userIdClaim = User.FindFirst("userId")?.Value;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
                 throw new UnauthorizedException("Invalid or expired token");
 

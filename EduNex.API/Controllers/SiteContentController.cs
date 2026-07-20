@@ -46,7 +46,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{key}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         [ServiceFilter(typeof(BlockedUserCheckFilter))]
         [ProducesResponseType(typeof(ApiDataResponse<SiteContentResultDto>), 200)]
         public async Task<IActionResult> Update(string key, [FromBody] JsonElement body)

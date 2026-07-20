@@ -118,7 +118,7 @@ namespace EduNex.Api.DataAccess
         {
             const string sql = @"
                 INSERT INTO dbo.student_profiles
-                    (id, user_id, plan, course_id, payment_image, citizenship_certificate)
+                    (id, user_id, [plan], course_id, payment_image, citizenship_certificate)
                 OUTPUT INSERTED.*
                 VALUES
                     (NEWID(), @UserId, @Plan, @CourseId, @PaymentImage, @CitizenshipCertificate)";

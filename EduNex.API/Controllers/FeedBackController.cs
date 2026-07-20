@@ -1,57 +1,83 @@
+using EduNex.Common;
 using EduNex.Models;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace EduNex.API.Controllers
 {
     [ApiController]
-    [Route("api/feedbacks")]
+    [Route("api/[controller]")]
     public class FeedbackController : ControllerBase
     {
         private readonly IFeedbackService _service;
-        public FeedbackController(IFeedbackService service) => _service = service;
+        private readonly ITurnstileVerifier _turnstile;
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] Feedback feedback)
+        public FeedbackController(IFeedbackService service, ITurnstileVerifier turnstile)
         {
-            try { return StatusCode(201, await _service.CreateFeedbackAsync(feedback)); }
-            catch (Exception ex) { return BadRequest(new { status = "error", message = ex.Message }); }
+            _service = service;
+            _turnstile = turnstile;
+        }
+
+        // GET api/feedback/public
+        [HttpGet("public")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ListPublic()
+        {
+            var data = await _service.ListPublicFeedbackAsync();
+            return Ok(new ApiDataResponse<List<Feedback>> { Data = data });
+        }
+
+        // POST api/feedback - public, gated by Turnstile instead of auth.
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<IActionResult> Create([FromBody] CreateFeedbackRequest input)
+        {
+            var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            if (!await _turnstile.VerifyAsync(input.TurnstileToken, remoteIp))
+                throw new ForbiddenException("Turnstile verification failed");
+
+            var entry = await _service.CreateFeedbackAsync(input);
+            return StatusCode(201, new ApiDataResponse<Feedback> { Data = entry });
+        }
+
+        [HttpGet("stats")]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> GetStats()
+        {
+            var stats = await _service.GetStatsAsync();
+            return Ok(new ApiDataResponse<FeedbackStatsDto> { Data = stats });
         }
 
         [HttpGet]
         [Authorize(Roles = "admin")]
-        public async Task<IActionResult> GetAll(int page = 1, int limit = 10)
+        public async Task<IActionResult> List([FromQuery] ListFeedbackQuery query)
         {
-            try
-            {
-                var result = await _service.GetFeedbacksAsync(page, limit);
-                return Ok(new { status = "success", data = result.Data, pagination = result.Pagination });
-            }
-            catch (Exception ex) { return StatusCode(500, new { status = "error", message = ex.Message }); }
+            var (data, total, page, limit) = await _service.ListFeedbackAsync(query);
+            var meta = PaginationMeta.Create(total, page, limit);
+            return Ok(new ApiListResponse<Feedback> { Data = data, Meta = meta });
         }
 
-        [HttpGet("positive")]
-        public async Task<IActionResult> GetPositive(int page = 1, int limit = 10)
+        [HttpPost("{id}/reply")]
+        [Authorize(Roles ="admin")]
+        public async Task<IActionResult> Reply(string id, [FromBody] ReplyFeedbackRequest input)
         {
-            try
-            {
-                var result = await _service.GetPositiveFeedbacksAsync(page, limit);
-                return Ok(new { status = "success", data = result.Data, pagination = result.Pagination });
-            }
-            catch (Exception ex) { return StatusCode(500, new { status = "error", message = ex.Message }); }
-        }
+            if (!Guid.TryParse(id, out Guid guid))
+                return BadRequest("Invalid feedback ID");
 
+            var entry = await _service.ReplyFeedbackAsync(guid, input.Reply);
+            return Ok(new ApiDataResponse<Feedback> { Data = entry });
+        }
         [HttpDelete("{id}")]
-        [Authorize(Roles = "admin")]
-        public async Task<IActionResult> Delete(Guid id)
+        [Authorize(Roles ="admin")]
+        public async Task<IActionResult> Remove(string id)
         {
-            try { return Ok(await _service.DeleteFeedbackAsync(id)); }
-            catch (Exception ex)
-            {
-                int statusCode = ex.Message == "Feedback not found" ? 404 : 400;
-                return StatusCode(statusCode, new { success = false, message = ex.Message });
-            }
+            await _service.DeleteFeedbackAsync(Guid.Parse(id));
+            return NoContent();
         }
     }
 }

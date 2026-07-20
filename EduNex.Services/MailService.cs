@@ -13,6 +13,9 @@ namespace EduNex.Services
         Task SendAnnouncementAsync(List<string> email, AnnouncementEmailPayload data);
         Task SendNewUserAdminNotificationAsync(NewUserAdminNotificationPayload payload);
         Task SendEventNotificationAsync(List<string> email, EventMailPayload data);
+        Task SendFeedbackReplyAsync(string email, string name, string feedbackText, string reply); 
+        Task SendClassMaterialAddedAsync(List<string> emails, ClassMaterialAddedMailData data);
+
     }
 
     public class MailService : IMailService
@@ -54,6 +57,12 @@ namespace EduNex.Services
         public async Task SendEventNotificationAsync(List<string> email, EventMailPayload data)
         {
 
+        }
+        public async Task SendFeedbackReplyAsync(string email, string name, string feedbackText, string reply)
+        {
+        }
+        public async Task SendClassMaterialAddedAsync(List<string> emails, ClassMaterialAddedMailData data)
+        {
         }
     }
     public class NewUserAdminNotificationPayload

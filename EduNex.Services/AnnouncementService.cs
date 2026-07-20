@@ -132,11 +132,11 @@ namespace EduNex.Services
                 throw new ForbiddenException("Sign in to view this announcement");
 
             // Enrolled-with-no-courseId: any authenticated student is fine.
-            if (!announcement.CourseId.HasValue && requester.Value.Role == "student")
+            if (!announcement.CourseId.HasValue && requester.Value.Role == "user")
                 return announcement;
 
             // Enrolled-for-specific-course: caller must be in that course.
-            if (announcement.CourseId.HasValue && requester.Value.Role == "student")
+            if (announcement.CourseId.HasValue && requester.Value.Role == "user")
             {
                 var courseId = await _repo.FindStudentCourseIdAsync(requester.Value.UserId);
                 if (courseId == announcement.CourseId) return announcement;

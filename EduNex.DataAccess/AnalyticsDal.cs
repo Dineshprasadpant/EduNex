@@ -24,6 +24,9 @@ namespace EduNex.DataAccess
 
         Task<List<AnalyticsDaily>> GetDailyStatsAsync(DateTime? from, DateTime? to);
         Task<DashboardSummaryDto> GetDashboardSummaryAsync();
+
+        Task<(List<LeaderboardEntryDto> Data, int Total)> GetLeaderboardAsync(
+            Guid? examId, Guid? courseId, DateTime? from, DateTime? to, int limit, int offset);
     }
 
     public class AnalyticsDal : IAnalyticsDal
@@ -297,7 +300,8 @@ namespace EduNex.DataAccess
         private async Task<List<PlanDistributionDto>> PlanDistributionAsync()
         {
             using IDbConnection db = CreateConnection();
-            const string sql = "SELECT plan AS Plan, COUNT(*) AS Count FROM dbo.student_profiles GROUP BY plan;";
+            // Wrap 'plan' in square brackets
+            const string sql = "SELECT [plan] AS [Plan], COUNT(*) AS Count FROM dbo.student_profiles GROUP BY [plan];";
             var rows = await db.QueryAsync<PlanDistributionDto>(sql);
             return rows.ToList();
         }
@@ -354,6 +358,107 @@ namespace EduNex.DataAccess
                 GROUP BY date;";
             var rows = await db.QueryAsync<TrendRow>(sql, new { From = sevenDaysAgoDate });
             return rows.ToList();
+        }
+
+
+        public async Task<(List<LeaderboardEntryDto> Data, int Total)> GetLeaderboardAsync(
+            Guid? examId, Guid? courseId, DateTime? from, DateTime? to, int limit, int offset)
+        {
+            using IDbConnection db = new SqlConnection(_connectionString);
+
+            // Fully parameterized - NOT string-interpolated like the TS
+            // source. See chat: that version relies entirely on the zod
+            // schema upstream for injection safety; this one doesn't need
+            // to rely on anything upstream at all.
+            var conditions = new List<string> { "ea.status = 'submitted'" };
+            var parameters = new DynamicParameters();
+
+            if (examId.HasValue)
+            {
+                conditions.Add("ea.exam_id = @ExamId");
+                parameters.Add("ExamId", examId.Value);
+            }
+            if (courseId.HasValue)
+            {
+                conditions.Add("sp.course_id = @CourseId");
+                parameters.Add("CourseId", courseId.Value);
+            }
+            if (from.HasValue)
+            {
+                conditions.Add("ea.submitted_at >= @From");
+                parameters.Add("From", from.Value);
+            }
+            if (to.HasValue)
+            {
+                // Inclusive of the whole "to" day: < the next day's start,
+                // computed in C# rather than via a SQL date-arithmetic
+                // expression - same result, one less thing to get wrong
+                // across two different SQL dialects.
+                conditions.Add("ea.submitted_at < @ToExclusive");
+                parameters.Add("ToExclusive", to.Value.AddDays(1));
+            }
+
+            var whereClause = string.Join(" AND ", conditions);
+            parameters.Add("Offset", offset);
+            parameters.Add("Limit", limit);
+
+            var rowsSql = $@"
+                WITH ranked AS (
+                    SELECT
+                        ea.id AS attempt_id,
+                        ea.user_id,
+                        u.first_name,
+                        u.last_name,
+                        e.id AS exam_id,
+                        e.title AS exam_title,
+                        ea.marks_obtained AS score,
+                        ea.total_marks,
+                        ea.percentage,
+                        ea.time_taken_seconds,
+                        ea.submitted_at,
+                        e.pass_marks,
+                        ROW_NUMBER() OVER (
+                            ORDER BY ea.percentage DESC, ea.marks_obtained DESC, ea.time_taken_seconds ASC
+                        ) AS rnk
+                    FROM dbo.exam_attempts ea
+                    INNER JOIN dbo.users u ON u.id = ea.user_id
+                    LEFT JOIN dbo.student_profiles sp ON sp.user_id = u.id
+                    INNER JOIN dbo.exams e ON e.id = ea.exam_id
+                    WHERE {whereClause}
+                )
+                SELECT
+                    rnk AS Rank,
+                    user_id AS UserId,
+                    first_name AS FirstName,
+                    last_name AS LastName,
+                    exam_id AS ExamId,
+                    exam_title AS ExamTitle,
+                    score AS Score,
+                    total_marks AS TotalMarks,
+                    percentage AS Percentage,
+                    time_taken_seconds AS TimeTakenSeconds,
+                    submitted_at AS SubmittedAt,
+                    CASE
+                        WHEN pass_marks IS NULL THEN NULL
+                        WHEN score >= pass_marks THEN 'pass'
+                        ELSE 'fail'
+                    END AS Status
+                FROM ranked
+                ORDER BY rnk
+                OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
+
+            var countSql = $@"
+                SELECT COUNT(*)
+                FROM dbo.exam_attempts ea
+                INNER JOIN dbo.users u ON u.id = ea.user_id
+                LEFT JOIN dbo.student_profiles sp ON sp.user_id = u.id
+                INNER JOIN dbo.exams e ON e.id = ea.exam_id
+                WHERE {whereClause};";
+
+            var rows = (await db.QueryAsync<LeaderboardEntryDto>(rowsSql, parameters)).ToList();
+            var total = await db.ExecuteScalarAsync<int>(countSql, parameters);
+
+            return (rows, total);
         }
     }
 }

@@ -53,9 +53,10 @@ namespace EduNex.Api.Service
 
             var claims = new[]
             {
-                new Claim("userId", payload.UserId.ToString()),
-                new Claim("role", payload.Role),
-            };
+        // Use ClaimTypes.NameIdentifier (Standard .NET Claim Type)
+        new Claim(ClaimTypes.NameIdentifier, payload.UserId.ToString()),
+        new Claim(ClaimTypes.Role, payload.Role),
+    };
 
             var token = new JwtSecurityToken(
                 claims: claims,
@@ -82,8 +83,8 @@ namespace EduNex.Api.Service
 
             return new JwtPayload
             {
-                UserId = Guid.Parse(principal.FindFirstValue("userId")!),
-                Role = principal.FindFirstValue("role")!,
+                UserId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!),
+                Role = principal.FindFirstValue(ClaimTypes.Role)!,
             };
         }
     }

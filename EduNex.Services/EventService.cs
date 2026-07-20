@@ -72,11 +72,11 @@ namespace EduNex.Services
             var pagination = Paginator.Paginate(query.Page.ToString(), query.Limit.ToString());
             var filters = new EventFilters { Search = query.Search };
 
-            if (requesterRole == "Admin" || requesterRole == "Teacher")
+            if (requesterRole == "admin" || requesterRole == "teacher")
             {
                 if (!string.IsNullOrWhiteSpace(query.Privacy)) filters.Privacy = query.Privacy;
             }
-            else if (requesterRole == "Student" && requesterUserId.HasValue)
+            else if (requesterRole == "user" && requesterUserId.HasValue)
             {
                 var courseId = await _eventDal.FindStudentCourseIdAsync(requesterUserId.Value);
                 if (courseId.HasValue) filters.EnrolledCourseId = courseId;
@@ -99,13 +99,13 @@ namespace EduNex.Services
             if (ev is null) throw new NotFoundException("Event not found");
 
             if (ev.Privacy == PrivacyType.Public) return ev;
-            if (requesterRole == "Admin" || requesterRole == "Teacher") return ev;
+            if (requesterRole == "admin" || requesterRole == "teacher") return ev;
 
             if (requesterUserId is null) throw new ForbiddenException("Sign in to view this event");
 
-            if (ev.CourseId is null && requesterRole == "Student") return ev;
+            if (ev.CourseId is null && requesterRole == "user") return ev;
 
-            if (ev.CourseId.HasValue && requesterRole == "Student")
+            if (ev.CourseId.HasValue && requesterRole == "user")
             {
                 var courseId = await _eventDal.FindStudentCourseIdAsync(requesterUserId.Value);
                 if (courseId == ev.CourseId) return ev;

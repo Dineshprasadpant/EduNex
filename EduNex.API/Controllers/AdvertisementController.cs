@@ -64,7 +64,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Create([FromBody] CreateAdvertisementRequest input)
         {
             try
@@ -79,7 +79,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> UpdatePut(string id, [FromBody] UpdateAdvertisementRequest input)
         {
             try
@@ -95,7 +95,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPatch("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> UpdatePatch(string id, [FromBody] UpdateAdvertisementRequest input)
         {
             try
@@ -111,7 +111,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Remove(string id)
         {
             try

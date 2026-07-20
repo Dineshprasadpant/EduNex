@@ -3,6 +3,7 @@ using EduNex.Models;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace EduNex.API.Controllers
 {
@@ -20,13 +21,13 @@ namespace EduNex.API.Controllers
 
         private Guid GetUserId()
         {
-            var claim = User.FindFirst("userId")?.Value;
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (claim is null || !Guid.TryParse(claim, out var userId))
                 throw new UnauthorizedException("Invalid or expired token");
             return userId;
         }
 
-        private string GetUserRole() => User.FindFirst("role")?.Value ?? string.Empty;
+        private string GetUserRole() => User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 
         [HttpGet]
         [ProducesResponseType(typeof(ApiListResponse<ExamListItemDto>), 200)]
@@ -45,7 +46,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Teacher")]
+        [Authorize(Roles = "admin,teacher")]
         [ProducesResponseType(typeof(ApiDataResponse<Exam>), 201)]
         public async Task<IActionResult> Create([FromBody] CreateExamRequestDto request)
         {
@@ -54,7 +55,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpPut("{id:guid}")]
-        [Authorize(Roles = "Admin,Teacher")]
+        [Authorize(Roles = "admin,teacher")]
         [ProducesResponseType(typeof(ApiDataResponse<Exam>), 200)]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateExamRequestDto request)
         {
@@ -63,7 +64,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpDelete("{id:guid}")]
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "admin")]
         [ProducesResponseType(204)]
         public async Task<IActionResult> Remove(Guid id)
         {
@@ -84,7 +85,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpGet("~/api/exam-attempts/all")]
-        [Authorize(Roles = "Admin,Teacher")]
+        [Authorize(Roles = "admin,teacher")]
         [ProducesResponseType(typeof(ApiListResponse<AllAttemptsRowDto>), 200)]
         public async Task<IActionResult> ListAllAttempts([FromQuery] AttemptsPaginationQueryDto query)
         {
@@ -101,7 +102,7 @@ namespace EduNex.API.Controllers
         }
 
         [HttpGet("~/api/exam-attempts/exam/{examId:guid}")]
-        [Authorize(Roles = "Admin,Teacher")]
+        [Authorize(Roles = "admin,teacher")]
         [ProducesResponseType(typeof(ApiListResponse<ExamAttemptRowDto>), 200)]
         public async Task<IActionResult> GetExamAttempts(Guid examId, [FromQuery] AttemptsPaginationQueryDto query)
         {

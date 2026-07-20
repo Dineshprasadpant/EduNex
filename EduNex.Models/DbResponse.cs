@@ -34,7 +34,28 @@ namespace EduNex.Models
         }
     }
 
+    public class ApiResponse<T>
+    {
+        public bool Success { get; set; } = true;
+        public string? Message { get; set; }
+        public T? Data { get; set; }
 
+        public static ApiResponse<T> Ok(T data, string? message = null) =>
+            new() { Success = true, Data = data, Message = message };
+    }
+
+    // Non-generic variant for endpoints that only return a message (delete, etc).
+    public class ApiResponse
+    {
+        public bool Success { get; set; } = true;
+        public string? Message { get; set; }
+
+        public static ApiResponse Ok(string message) =>
+            new() { Success = true, Message = message };
+
+        public static ApiResponse Fail(string message) =>
+            new() { Success = false, Message = message };
+    }
     public class PaginationMeta
     {
         public int Page { get; set; }
