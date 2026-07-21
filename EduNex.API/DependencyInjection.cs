@@ -95,6 +95,7 @@ namespace EduNex.API
             services.AddScoped<IUserDal>(_ => new UserDal(connectionString));
             services.AddScoped<ISiteContentDal, SiteContentDal>();
             services.AddScoped<ICategoryDal, CategoryDal>();
+            services.AddScoped<IContactDal, ContactDal>();
 
 
             // Services
@@ -123,6 +124,7 @@ namespace EduNex.API
             services.AddScoped<IGalleryService, GalleryService>();
             services.AddScoped<IMediaService, MediaService>();
             services.AddScoped<IFileService, FileService>();
+            services.AddScoped<IContactService, ContactService>();
             // CORS
             var allowedOrigins = configuration
                 .GetSection("Cors:AllowedOrigins")

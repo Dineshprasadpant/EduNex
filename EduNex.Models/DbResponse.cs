@@ -86,6 +86,8 @@ namespace EduNex.Models
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PaginationMeta? Meta { get; set; }
+        public static ApiListResponse<T> Ok(IEnumerable<T> data, PaginationMeta meta) =>
+        new() { Success = true, Data = data, Meta = meta };
     }
 
 
