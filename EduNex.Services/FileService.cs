@@ -113,6 +113,7 @@ namespace EduNex.Services
 
              await _mediaDal.CreateAsync(
                     storedFilename,
+                    uploadResult.public_id,
                     uploadResult.OriginalFileName,
                     file.ContentType,
                     uploadResult.Size,

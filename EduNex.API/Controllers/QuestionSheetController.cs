@@ -32,7 +32,7 @@ namespace EduNex.API.Controllers
         {
             var sheet = await _service.GetSheetByIdAsync(id);
             if (sheet == null) return NotFound(new { message = "Question sheet not found" });
-            return Ok(sheet);
+            return Ok(new { success = true, data = sheet });
         }
 
         [HttpPost]

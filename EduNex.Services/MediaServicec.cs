@@ -47,7 +47,7 @@ namespace EduNex.Services
         public async Task<MediaCreatedDto> CreateMediaAsync(CreateMediaRequest input, Guid? uploadedBy)
         {
             var row = await _dal.CreateAsync(
-                input.Filename, input.OriginalName, input.MimeType, input.Size,
+                input.Filename, Guid.NewGuid(), input.OriginalName, input.MimeType, input.Size,
                 input.Url, input.S3Key, uploadedBy);
 
             return new MediaCreatedDto

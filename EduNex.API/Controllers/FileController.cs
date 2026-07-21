@@ -1,6 +1,8 @@
+using EduNex.Models;
 using EduNex.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 using System.Security.Claims;
 namespace EduNex.API.Controllers
 {
@@ -28,13 +30,15 @@ namespace EduNex.API.Controllers
                     message = "File uploaded successfully to public bucket",
                     data = new
                     {
-                        res.Url,
-                        res.public_id,
-                        res.Key,
-                        res.Format,
-                        res.Size,
-                        res.OriginalFileName,
-                        bucket = "public"
+                        id = res.public_id,
+                        filename = res.Key,
+                        originalName =res.OriginalFileName,
+                        mimeType = res.Format,
+                        size = res.Size,
+                        url = res.Url,
+                        s3Key = res.Key,
+                        uploadedBy = userId,
+                        createdAt = DateTime.Now
                     }
 
                 });
@@ -64,7 +68,48 @@ namespace EduNex.API.Controllers
 
             return Ok(new { success = true, message = "File deleted successfully." });
         }
+        [HttpGet("download")]
+        [AllowAnonymous] // signature itself is the auth, not the bearer token
+        public async Task<IActionResult> Download(
+            [FromQuery] string key,
+            [FromQuery] long exp,
+            [FromQuery] string sig,
+            [FromQuery] string? filename)
+        {
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(sig))
+                return BadRequest(new { success = false, message = "Invalid download link." });
 
+            if (!_fileService.ValidateSignedLink(key, exp, "download", sig))
+                return Unauthorized(new { success = false, message = "Download link expired or invalid." });
+
+            try
+            {
+                var obj = await _fileService.GetObjectStreamAsync(key);
+
+                var contentType = obj.ContentType;
+                if (string.IsNullOrEmpty(contentType))
+                {
+                    var provider = new FileExtensionContentTypeProvider();
+                    if (!provider.TryGetContentType(key, out contentType))
+                        contentType = "application/octet-stream";
+                }
+
+                var downloadName = string.IsNullOrWhiteSpace(filename)
+                    ? Path.GetFileName(key)
+                    : filename;
+
+                // Content-Disposition: attachment — forces download instead of inline render
+                return File(obj.Body, contentType, downloadName);
+            }
+            catch (FileNotFoundException)
+            {
+                return NotFound(new { success = false, message = "File not found." });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return BadRequest(new { success = false, message = "Invalid file path." });
+            }
+        }
         public class DeleteFileRequest
         {
             public string s3Url { get; set; } = string.Empty;

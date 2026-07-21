@@ -56,5 +56,15 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGet("/api/status", () =>
+{
+    return Results.Ok(new
+    {
+        success = true,
+        message = "Server is running",
+        dateTime = DateTime.Now,
+        utcDateTime = DateTime.UtcNow
+    });
+});
 
 app.Run();

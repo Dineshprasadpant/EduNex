@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace EduNex.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/class-materials")]
     public class ClassMaterialsController : ControllerBase
     {
         private readonly IClassMaterialService _service;

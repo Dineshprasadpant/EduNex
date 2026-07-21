@@ -164,6 +164,7 @@ namespace EduNex.DataAccess
             Guid sheetId, string questionText, decimal marks, int sortOrder, List<QuestionOptionInput> options)
         {
             using var conn =  _dbconn.CreateConnection();
+            conn.Open();
             using var tx = conn.BeginTransaction();
             try
             {
@@ -234,6 +235,7 @@ namespace EduNex.DataAccess
         public async Task ReplaceOptionsAsync(Guid questionId, List<QuestionOptionInput> options)
         {
             using var conn =  _dbconn.CreateConnection();
+            conn.Open();
             using var tx = conn.BeginTransaction();
             try
             {
@@ -274,6 +276,7 @@ namespace EduNex.DataAccess
         public async Task ReorderQuestionsAsync(List<ReorderItem> orders)
         {
             using var conn =  _dbconn.CreateConnection();
+            conn.Open();
             using var tx = conn.BeginTransaction();
             try
             {
@@ -293,6 +296,7 @@ namespace EduNex.DataAccess
         public async Task<List<Guid>> BulkAddQuestionsAsync(Guid sheetId, List<ImportQuestionInput> questions)
         {
             using var conn =  _dbconn.CreateConnection();
+            conn.Open();
             using var tx = conn.BeginTransaction();
             var ids = new List<Guid>();
             try

@@ -14,7 +14,7 @@ namespace EduNex.DataAccess
             string? search, string? mimeType, int offset, int limit);
         Task<MediaListRow?> FindByIdAsync(Guid id);
         Task<MediaRow> CreateAsync(
-            string filename, string originalName, string mimeType, long size,
+            string filename, Guid id, string originalName, string mimeType, long size,
             string url, string? s3Key, Guid? uploadedBy);
         Task RemoveAsync(Guid id);
     }
@@ -71,20 +71,21 @@ namespace EduNex.DataAccess
         }
 
         public async Task<MediaRow> CreateAsync(
-            string filename, string originalName, string mimeType, long size,
+            string filename, Guid id, string originalName, string mimeType, long size,
             string url, string? s3Key, Guid? uploadedBy)
         {
             using var conn = _dbconn.CreateConnection();
             const string sql = @"
-                INSERT INTO dbo.media (filename, original_name, mime_type, size, url, s3_key, uploaded_by)
+                INSERT INTO dbo.media (id,filename, original_name, mime_type, size, url, s3_key, uploaded_by)
                 OUTPUT INSERTED.id AS Id, INSERTED.filename AS Filename,
                        INSERTED.original_name AS OriginalName, INSERTED.mime_type AS MimeType,
                        INSERTED.size AS Size, INSERTED.url AS Url, INSERTED.s3_key AS S3Key,
                        INSERTED.uploaded_by AS UploadedBy, INSERTED.created_at AS CreatedAt
-                VALUES (@Filename, @OriginalName, @MimeType, @Size, @Url, @S3Key, @UploadedBy);";
+                VALUES (@Id,@Filename, @OriginalName, @MimeType, @Size, @Url, @S3Key, @UploadedBy);";
 
             return await conn.QuerySingleAsync<MediaRow>(sql, new
             {
+                Id=id,
                 Filename = filename,
                 OriginalName = originalName,
                 MimeType = mimeType,
