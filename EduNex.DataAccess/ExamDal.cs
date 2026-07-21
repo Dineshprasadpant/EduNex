@@ -594,36 +594,52 @@ namespace EduNex.DataAccess
         {
             using var connection = CreateConnection();
 
-            var attempt = await connection.QueryFirstOrDefaultAsync<ExamAttempt>(
-                "SELECT * FROM dbo.exam_attempts WHERE id = @Id", new { Id = attemptId });
+            Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+            const string sql = @"
+        SELECT * FROM dbo.exam_attempts WHERE id = @Id;
+
+        SELECT * FROM dbo.exam_attempt_answers WHERE attempt_id = @Id;
+
+        SELECT e.* 
+        FROM dbo.exams e
+        INNER JOIN dbo.exam_attempts ea ON ea.exam_id = e.id
+        WHERE ea.id = @Id;
+
+        SELECT q.* 
+        FROM dbo.questions q
+        INNER JOIN dbo.exams e ON e.question_sheet_id = q.sheet_id
+        INNER JOIN dbo.exam_attempts ea ON ea.exam_id = e.id
+        WHERE ea.id = @Id
+        ORDER BY q.sort_order;
+
+        SELECT o.* 
+        FROM dbo.question_options o
+        INNER JOIN dbo.questions q ON q.id = o.question_id
+        INNER JOIN dbo.exams e ON e.question_sheet_id = q.sheet_id
+        INNER JOIN dbo.exam_attempts ea ON ea.exam_id = e.id
+        WHERE ea.id = @Id
+        ORDER BY o.sort_order;
+    ";
+
+            using var multi = await connection.QueryMultipleAsync(sql, new { Id = attemptId });
+
+            var attempt = await multi.ReadFirstOrDefaultAsync<ExamAttempt>();
             if (attempt is null) return null;
 
-            var answers = (await connection.QueryAsync<ExamAttemptAnswer>(
-                "SELECT * FROM dbo.exam_attempt_answers WHERE attempt_id = @Id", new { Id = attemptId })).ToList();
+            var answers = (await multi.ReadAsync<ExamAttemptAnswer>()).ToList();
+            var exam = await multi.ReadFirstOrDefaultAsync<Exam>();
+            var questions = (await multi.ReadAsync<Question>()).ToList();
+            var options = (await multi.ReadAsync<QuestionOption>()).ToList();
 
-            var exam = await connection.QueryFirstOrDefaultAsync<Exam>(
-                "SELECT * FROM dbo.exams WHERE id = @ExamId", new { ExamId = attempt.ExamId });
+            // Grouping & Mapping in memory
+            var optionsByQuestion = options
+                .GroupBy(o => o.QuestionId)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
-            var questions = exam is not null
-                ? (await connection.QueryAsync<Question>(
-                    "SELECT * FROM dbo.questions WHERE sheet_id = @SheetId ORDER BY sort_order",
-                    new { SheetId = exam.QuestionSheetId })).ToList()
-                : new List<Question>();
+            var answerMap = answers
+                .GroupBy(a => a.QuestionId)
+                .ToDictionary(g => g.Key, g => g.First());
 
-            var questionIds = questions.Select(q => q.Id).ToList();
-            var options = questionIds.Count > 0
-                ? (await connection.QueryAsync<QuestionOption>(
-                    "SELECT * FROM dbo.question_options WHERE question_id IN @Ids ORDER BY sort_order",
-                    new { Ids = questionIds })).ToList()
-                : new List<QuestionOption>();
-
-            var optionsByQuestion = options.GroupBy(o => o.QuestionId).ToDictionary(g => g.Key, g => g.ToList());
-            var answerMap = answers.ToDictionary(a => a.QuestionId);
-
-            // IsCorrect is populated here regardless of viewer -- the service
-            // layer (GetAttemptDetailAsync) decides whether to null it out
-            // before returning, mirroring sanitizeDetail()'s allowAnswerKey
-            // gate in attempts-history.service.ts.
             var questionDtos = questions.Select(q => new AttemptDetailQuestionDto
             {
                 Id = q.Id,
